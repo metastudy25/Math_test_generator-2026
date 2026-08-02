@@ -1260,7 +1260,8 @@ function openDelModal(sid) {
     +(recCnt?'  ·  응시 기록 <strong style="color:var(--rd)">'+recCnt+'회</strong>':'  ·  응시 기록 없음');
 
   var btn = document.getElementById("mo-del-confirm");
-  btn.disabled = true; btn.style.opacity = ".4";
+  /* 버튼 바로 활성화 - 모달 내 경고 문구로 충분 */
+  btn.disabled = false; btn.style.opacity = "1";
 
   openMo("mo-del");
 }
@@ -1574,9 +1575,7 @@ function rDash() {
       +'<td>'+recCntD+'</td>'
       +'<td><div style="display:flex;gap:5px;flex-wrap:wrap">'
       +'<button class="btn bgy bsm" data-edit-set="'+s.id+'">✏️ 수정</button>'
-      +(s.id!=="__P__"
-        ?'<button class="btn brd bsm" data-del-set="'+s.id+'">🗑️ 삭제</button>'
-        :'<span style="font-size:10px;color:#aaa">기본</span>')
+      +'<button class="btn brd bsm" data-del-set="'+s.id+'">🗑️ 삭제</button>'
       +'</div></td></tr>';
   });
   if(!DB.sets.length) h+='<tr><td colspan="6" style="text-align:center;color:#aaa;padding:18px">없음</td></tr>';
@@ -1713,7 +1712,7 @@ function rUp() {
             +'<span class="bdg bgy2">'+s.type+'</span>'
             +'<button class="btn bor bsm" data-edit-set="'+s.id+'">✏️ 수정</button>'
             +'<button class="btn bgy bsm" data-pl="pl-'+s.id+'">목록</button>'
-            +(s.id!=="__P__"?'<button class="btn brd bsm" data-del-set="'+s.id+'">삭제</button>':"")
+            +'<button class="btn brd bsm" data-del-set="'+s.id+'">🗑️ 삭제</button>'
             +'</div></div>'
             +'<div class="set-item-meta">'
             +'<span>문제 <strong>'+s.problems.length+'</strong>개</span>'
@@ -2539,7 +2538,7 @@ function rConq() {
    이벤트 위임 (모든 클릭을 여기서 처리)
 ───────────────────────────────────────── */
 document.addEventListener("click", function(e) {
-  var t=e.target.closest("[id],[data-sp],[data-qset],[data-prev],[data-pl],[data-del-set],[data-del-stu],[data-edit-set],.ci,.ac");
+  var t=e.target.closest("[id],[data-sp],[data-qset],[data-prev],[data-pl],[data-del-set],[data-del-stu],[data-edit-set],[data-subj-tab],[data-inner-grade],[data-for-subj],[data-ubtab],[data-paste-clear],[data-paste-parse],[data-paste-upload],[data-new-set],[data-new-subj],[data-goto-up],[data-goto-up-subj],[data-det],[data-grade-tab],.ci,.ac,.dropzone-new,.grade-upload-zone");
   if(!t) return;
 
   /* 로그인 */
@@ -2634,7 +2633,7 @@ document.addEventListener("click", function(e) {
   }
 
   var dset=t.getAttribute("data-del-set");
-  if(dset){if(confirm("삭제?")){ DB.sets=DB.sets.filter(function(s){return s.id!==dset;});DB.recs=DB.recs.filter(function(r){return r.sid!==dset;});sdb();showToast("삭제","err");ap("up");}return;}
+  if(dset){ openDelModal(dset); return; }
   var det=t.getAttribute("data-det");
   if(det){var dp=document.getElementById(det);if(dp)dp.classList.toggle("open");return;}
   var dstu=t.getAttribute("data-del-stu");
