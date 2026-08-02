@@ -784,6 +784,25 @@ button,input,select,textarea{font-family:inherit}
   border-radius:9px; margin-top:10px; font-size:13px; color:var(--rd);
 }
 
+
+/* ══ 삭제 확인 모달 ══ */
+.del-modal-body { text-align:center; padding:8px 0 4px; }
+.del-modal-icon { font-size:52px; margin-bottom:12px; }
+.del-modal-title { font-size:18px; font-weight:900; color:#111; margin-bottom:6px; }
+.del-modal-desc { font-size:13.5px; color:var(--mu); line-height:1.7; margin-bottom:4px; }
+.del-modal-warn { font-size:12.5px; color:var(--rd); font-weight:700;
+  background:#fff5f5; border:1.5px solid #fca5a5; border-radius:8px;
+  padding:8px 14px; margin-top:12px; }
+.del-confirm-input { width:100%; padding:10px 13px; border:2px solid var(--br);
+  border-radius:8px; font-size:14px; outline:none; margin-top:12px;
+  transition:border-color .2s; text-align:center; letter-spacing:1px; }
+.del-confirm-input:focus { border-color:var(--rd); }
+.del-confirm-input.match { border-color:var(--gn); background:#f0fdf4; }
+
+/* 문제집 삭제 행 hover */
+.tbl tr:hover .del-btn-show { opacity:1; }
+.del-btn-show { transition:opacity .15s; }
+
 </style>
 </head>
 <body>
@@ -1224,6 +1243,42 @@ function buildUpSuccessHtml(set, boxKey) {
     +'</div></div>';
 }
 
+
+/* ══ 문제집 삭제 ══ */
+var _delTargetId = null;
+
+function openDelModal(sid) {
+  var set = DB.sets.find(function(s){ return s.id===sid; });
+  if (!set) return;
+  _delTargetId = sid;
+
+  var recCnt = DB.recs.filter(function(r){ return r.sid===sid; }).length;
+  document.getElementById("del-modal-title").textContent = "「"+set.name+"」 삭제";
+  document.getElementById("del-modal-desc").innerHTML =
+    '<strong>'+set.name+'</strong><br>'
+    +(set.grade?set.grade+' ':'')+( set.subject||'수학')+'  ·  문제 <strong>'+set.problems.length+'</strong>개'
+    +(recCnt?'  ·  응시 기록 <strong style="color:var(--rd)">'+recCnt+'회</strong>':'  ·  응시 기록 없음');
+
+  var btn = document.getElementById("mo-del-confirm");
+  btn.disabled = true; btn.style.opacity = ".4";
+
+  openMo("mo-del");
+}
+
+function confirmDelete() {
+  if (!_delTargetId) return;
+  DB.sets = DB.sets.filter(function(s){ return s.id!==_delTargetId; });
+  DB.recs = DB.recs.filter(function(r){ return r.sid!==_delTargetId; });
+  sdb();
+  _delTargetId = null;
+  closeMo("mo-del");
+  showToast("문제집이 삭제되었습니다","err");
+  /* 현재 페이지 새로고침 */
+  var curMenu = document.querySelector(".ai.on");
+  var curId = curMenu ? curMenu.id : "am-dash";
+  ap(curId.replace("am-",""));
+}
+
 function parseTxt(raw) {
   /* ══ 메타 추출 ══ */
   var name="", grade="", type="단원평가", school="";
@@ -1509,12 +1564,20 @@ function rDash() {
     +'<div class="card"><div class="ct">📋 문제집 현황</div>'
     +'<table class="tbl"><thead><tr><th>문제집명</th><th>학년</th><th>유형</th><th>문제수</th><th>응시</th><th>관리</th></tr></thead><tbody>';
   DB.sets.forEach(function(s){
-    h+='<tr><td><strong>'+s.name+'</strong></td>'
-      +'<td><span class="bdg bnv">'+(s.grade||"")+'</span></td>'
-      +'<td><span class="bdg bgy2">'+(s.type||"")+'</span></td>'
+    var recCntD=DB.recs.filter(function(r){return r.sid===s.id;}).length;
+    h+='<tr><td><strong>'+s.name+'</strong>'
+      +(s.subject?'<span class="bdg bgy2" style="margin-left:5px;font-size:10px">'+s.subject+'</span>':"")
+      +'</td>'
+      +'<td><span class="bdg bnv">'+(s.grade||"—")+'</span></td>'
+      +'<td><span class="bdg bgy2">'+(s.type||"—")+'</span></td>'
       +'<td>'+s.problems.length+'</td>'
-      +'<td>'+DB.recs.filter(function(r){return r.sid===s.id;}).length+'</td>'
-      +'<td><button class="btn bgy bsm" data-edit-set="'+s.id+'">✏️ 수정</button></td></tr>';
+      +'<td>'+recCntD+'</td>'
+      +'<td><div style="display:flex;gap:5px;flex-wrap:wrap">'
+      +'<button class="btn bgy bsm" data-edit-set="'+s.id+'">✏️ 수정</button>'
+      +(s.id!=="__P__"
+        ?'<button class="btn brd bsm" data-del-set="'+s.id+'">🗑️ 삭제</button>'
+        :'<span style="font-size:10px;color:#aaa">기본</span>')
+      +'</div></td></tr>';
   });
   if(!DB.sets.length) h+='<tr><td colspan="6" style="text-align:center;color:#aaa;padding:18px">없음</td></tr>';
   h+='</tbody></table></div>'
@@ -2500,6 +2563,8 @@ document.addEventListener("click", function(e) {
 
   /* 모달 */
   if(t.id==="mo-set-cancel"){closeMo("mo-set");return;}
+  if(t.id==="mo-del-cancel"){closeMo("mo-del");_delTargetId=null;return;}
+  if(t.id==="mo-del-confirm"){confirmDelete();return;}
   if(t.id==="mo-stu-cancel"){closeMo("mo-stu");return;}
   if(t.id==="mo-set-save"){saveSetInfo();return;}
   if(t.id==="mo-stu-save"){
@@ -2648,5 +2713,24 @@ document.addEventListener("change", function(e) {
 window.addEventListener("DOMContentLoaded",function(){ showScr("sl"); });
 
 </script>
+
+<!-- MODAL: 문제집 삭제 확인 -->
+<div class="mo" id="mo-del">
+  <div class="mob" style="max-width:420px">
+    <div class="del-modal-body">
+      <div class="del-modal-icon">🗑️</div>
+      <div class="del-modal-title" id="del-modal-title">문제집 삭제</div>
+      <div class="del-modal-desc" id="del-modal-desc"></div>
+      <div class="del-modal-warn">
+        ⚠️ 삭제하면 이 문제집의 <strong>모든 문제</strong>와 <strong>학생 성적 기록</strong>이 함께 삭제되며 복구할 수 없습니다.
+      </div>
+    </div>
+    <div class="mof" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <button class="btn bgy" id="mo-del-cancel">취소</button>
+      <button class="btn brd" id="mo-del-confirm" disabled style="opacity:.4">🗑️ 삭제 확인</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
