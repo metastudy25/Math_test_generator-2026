@@ -2538,146 +2538,224 @@ function rConq() {
    이벤트 위임 (모든 클릭을 여기서 처리)
 ───────────────────────────────────────── */
 document.addEventListener("click", function(e) {
-  var t=e.target.closest("[id],[data-sp],[data-qset],[data-prev],[data-pl],[data-del-set],[data-del-stu],[data-edit-set],[data-subj-tab],[data-inner-grade],[data-for-subj],[data-ubtab],[data-paste-clear],[data-paste-parse],[data-paste-upload],[data-new-set],[data-new-subj],[data-goto-up],[data-goto-up-subj],[data-det],[data-grade-tab],.ci,.ac,.dropzone-new,.grade-upload-zone");
-  if(!t) return;
+  /* closest로 실제 이벤트 대상 탐색 */
+  var t = e.target.closest(
+    "[id],[data-sp],[data-qset],[data-prev],[data-pl]," +
+    "[data-del-set],[data-del-stu],[data-edit-set]," +
+    "[data-subj-tab],[data-inner-grade],[data-ubtab]," +
+    "[data-paste-clear],[data-paste-parse],[data-paste-upload]," +
+    "[data-new-set],[data-new-subj],[data-goto-up],[data-goto-up-subj]," +
+    "[data-det],[data-grade-tab],.ci,.ac,.dropzone-new"
+  );
+  if (!t) return;
 
-  /* 로그인 */
-  if(t.id==="s-login-btn"){sLogin();return;}
-  if(t.id==="a-login-btn"){aLogin();return;}
-  if(t.id==="adm-toggle-link"){var f=document.getElementById("adm-form");f.style.display=f.style.display==="none"?"block":"none";return;}
-  if(t.id==="adm-logout-btn"||t.id==="stu-logout-btn"){logout();return;}
+  /* ── 로그인 ── */
+  if (t.id==="s-login-btn") { sLogin(); return; }
+  if (t.id==="a-login-btn") { aLogin(); return; }
+  if (t.id==="adm-toggle-link") {
+    var af=document.getElementById("adm-form");
+    af.style.display=af.style.display==="none"?"block":"none"; return;
+  }
+  if (t.id==="adm-logout-btn"||t.id==="stu-logout-btn") { logout(); return; }
 
-  /* 관리자 메뉴 */
-  if(t.id==="am-dash"){ap("dash");return;}
-  if(t.id==="am-up"){ap("up");return;}
-  if(t.id==="am-stus"){ap("stus");return;}
-  if(t.id==="am-recs"){ap("recs");return;}
-  if(t.id==="am-grades"){ap("grades");return;}
+  /* ── 관리자 사이드 메뉴 ── */
+  if (t.id==="am-dash")   { ap("dash");   return; }
+  if (t.id==="am-up")     { ap("up");     return; }
+  if (t.id==="am-stus")   { ap("stus");   return; }
+  if (t.id==="am-recs")   { ap("recs");   return; }
+  if (t.id==="am-grades") { ap("grades"); return; }
 
-  /* 학생 메뉴 */
-  if(t.id==="sm-home"){sp("home");return;}
-  if(t.id==="sm-quiz"){sp("quiz");return;}
-  if(t.id==="sm-wrong"){sp("wrong");return;}
-  if(t.id==="sm-conq"){sp("conq");return;}
+  /* ── 학생 메뉴 탭 ── */
+  if (t.id==="sm-home")  { sp("home");  return; }
+  if (t.id==="sm-quiz")  { sp("quiz");  return; }
+  if (t.id==="sm-wrong") { sp("wrong"); return; }
+  if (t.id==="sm-conq")  { sp("conq");  return; }
 
-  /* 모달 */
-  if(t.id==="mo-set-cancel"){closeMo("mo-set");return;}
-  if(t.id==="mo-del-cancel"){closeMo("mo-del");_delTargetId=null;return;}
-  if(t.id==="mo-del-confirm"){confirmDelete();return;}
-  if(t.id==="mo-stu-cancel"){closeMo("mo-stu");return;}
-  if(t.id==="mo-set-save"){saveSetInfo();return;}
-  if(t.id==="mo-stu-save"){
+  /* ── 모달 버튼 ── */
+  if (t.id==="mo-set-cancel") { closeMo("mo-set"); return; }
+  if (t.id==="mo-stu-cancel") { closeMo("mo-stu"); return; }
+  if (t.id==="mo-del-cancel") { closeMo("mo-del"); _delTargetId=null; return; }
+  if (t.id==="mo-del-confirm"){ confirmDelete(); return; }
+  if (t.id==="mo-set-save") {
+    var n2=document.getElementById("ms-n").value.trim();
+    if (!n2){showToast("이름 입력 필요","err");return;}
+    var g2=document.getElementById("ms-g").value.trim();
+    var t2=document.getElementById("ms-t").value;
+    var sc2=document.getElementById("ms-sc").value.trim();
+    if (APP.editSetId) {
+      var set2=DB.sets.find(function(s){return s.id===APP.editSetId;});
+      if (set2){set2.name=n2;set2.grade=g2;set2.type=t2;set2.school=sc2;}
+      sdb();closeMo("mo-set");showToast("수정 완료 ✅","ok");ap("up");
+    } else {
+      var ns=APP._newSetSubj||APP._upSubj||"수학";
+      DB.sets.push({id:uid(),name:n2,grade:g2,type:t2,school:sc2,subject:ns,problems:[]});
+      sdb();closeMo("mo-set");showToast("생성 완료 ✅","ok");ap("up");
+    }
+    return;
+  }
+  if (t.id==="mo-stu-save") {
     var sn=document.getElementById("su-n").value.trim();
-    var sp2=document.getElementById("su-p").value;
-    if(!sn||sp2.length<4){showToast("이름·비번(4자+)","err");return;}
-    if(allS().find(function(s){return s.n===sn;})){showToast("이미 있는 이름","err");return;}
-    if(!DB.xs)DB.xs=[];
-    DB.xs.push({id:uid(),n:sn,pw:sp2,g:document.getElementById("su-g").value});
+    var spw=document.getElementById("su-p").value;
+    if (!sn||spw.length<4){showToast("이름·비번(4자+)","err");return;}
+    if (allS().find(function(s){return s.n===sn;})){showToast("이미 있는 이름","err");return;}
+    if (!DB.xs) DB.xs=[];
+    DB.xs.push({id:uid(),n:sn,pw:spw,g:document.getElementById("su-g").value});
     sdb();closeMo("mo-stu");showToast("등록 ✅","ok");ap("stus");return;
   }
 
-  /* 동적 버튼 */
-  if(t.id==="new-set-btn"){openNewSet();return;}
-  if(t.id==="new-stu-btn"){openMo("mo-stu");return;}
-  if(t.id==="dl-btn"||t.id==="dl-btn2"||t.id==="dl-btn3"){dlHTML();return;}
-  if(t.id==="print-btn"||t.id==="print-btn2"){window.print();return;}
-  if(t.id==="sub-btn"){doSubmit();return;}
-  if(t.id==="retry-btn"||t.id==="retry-btn2"){doRetry();return;}
-  if(t.id==="wq-btn"){doWrongQuiz();return;}
+  /* ── 업로드 탭 버튼 ── */
+  if (t.id==="new-set-btn") { openNewSet(); return; }
+  if (t.id==="new-stu-btn") { openMo("mo-stu"); return; }
+  if (t.id==="dl-btn"||t.id==="dl-btn2"||t.id==="dl-btn3") { dlHTML(); return; }
+  if (t.id==="print-btn"||t.id==="print-btn2") { window.print(); return; }
+  if (t.id==="sub-btn")     { doSubmit(); return; }
+  if (t.id==="retry-btn"||t.id==="retry-btn2") { doRetry(); return; }
+  if (t.id==="wq-btn")      { doWrongQuiz(); return; }
 
-  /* data 속성 */
-  var es=t.getAttribute("data-edit-set"); if(es){openEditSet(es);return;}
-  var qset=t.getAttribute("data-qset"); if(qset){qSet(qset);return;}
-  var spp=t.getAttribute("data-sp"); if(spp){sp(spp);return;}
-  var prev=t.getAttribute("data-prev"); if(prev){prevSet(prev);return;}
-  var pl=t.getAttribute("data-pl");
-  if(pl){var el2=document.getElementById(pl);if(el2)el2.style.display=el2.style.display==="none"?"block":"none";return;}
+  /* ── 과목 탭 ── */
+  var subjTab = t.getAttribute("data-subj-tab");
+  if (subjTab) { APP._upSubj=subjTab; ap("up"); return; }
 
-  /* 학년 탭 클릭 */
-  /* 대시보드 학년 박스 클릭 → 업로드 탭으로 이동 */
-  var gotoUp = t.closest("[data-goto-up]");
-  if (gotoUp) {
-    APP._upGrade = gotoUp.getAttribute("data-goto-up");
+  /* ── 내부 학년 탭 ── */
+  var innerGrade = t.getAttribute("data-inner-grade");
+  if (innerGrade) {
+    APP._upGrade = innerGrade;
+    var fs = t.getAttribute("data-for-subj");
+    if (fs) APP._upSubj = fs;
     ap("up"); return;
   }
 
-  var gTab = t.getAttribute("data-grade-tab");
-  if (gTab) {
-    APP._upGrade = gTab;
-    ap("up");
+  /* ── 업로드 방식 탭 (파일/붙여넣기) ── */
+  var ubTab = t.getAttribute("data-ubtab");
+  var ubBox = t.getAttribute("data-box");
+  if (ubTab && ubBox) {
+    ["file","paste"].forEach(function(tp){
+      var el=document.getElementById("ubt-"+tp+"-"+ubBox);
+      if (el) el.style.display = (tp===ubTab)?"block":"none";
+    });
+    var tabsEl = t.closest(".upload-box-tabs");
+    if (tabsEl) tabsEl.querySelectorAll(".upload-box-tab").forEach(function(b){
+      b.classList.toggle("on", b.getAttribute("data-ubtab")===ubTab);
+    });
     return;
   }
 
-  /* 학년별 새 문제집 만들기 */
+  /* ── 붙여넣기 버튼 ── */
+  var pasteClear = t.getAttribute("data-paste-clear");
+  if (pasteClear) {
+    var ta=document.getElementById("pa-"+pasteClear);
+    if (ta) ta.value="";
+    var pp=document.getElementById("pp-"+pasteClear);
+    if (pp) pp.innerHTML="";
+    return;
+  }
+  var pasteParse = t.getAttribute("data-paste-parse");
+  if (pasteParse) {
+    showPastePreview(pasteParse, t.getAttribute("data-subj"), t.getAttribute("data-grade"));
+    return;
+  }
+  var pasteUp = t.getAttribute("data-paste-upload");
+  if (pasteUp) {
+    uploadPaste(pasteUp, t.getAttribute("data-subj"), t.getAttribute("data-grade"));
+    return;
+  }
+
+  /* ── 새 문제집 만들기 (학년+과목 지정) ── */
   var newSetGrade = t.getAttribute("data-new-set");
+  var newSetSubj  = t.getAttribute("data-new-subj");
   if (newSetGrade) {
-    APP._newSetGrade = newSetGrade;
-    document.getElementById("ms-g").value = newSetGrade;
-    document.querySelector("#mo-set .mot").textContent = "📚 "+newSetGrade+" 문제집 만들기";
-    APP.editSetId = null;
-    document.getElementById("ms-n").value = "";
-    document.getElementById("ms-sc").value = "";
-    document.getElementById("ms-t").selectedIndex = 0;
-    openMo("mo-set");
+    APP._newSetGrade=newSetGrade;
+    APP._newSetSubj=newSetSubj||APP._upSubj||"수학";
+    document.getElementById("ms-g").value=newSetGrade;
+    document.getElementById("ms-n").value="";
+    document.getElementById("ms-sc").value="";
+    document.getElementById("ms-t").selectedIndex=0;
+    document.querySelector("#mo-set .mot").textContent=
+      "📚 "+(newSetSubj||APP._upSubj||"수학")+" "+newSetGrade+" 문제집 만들기";
+    APP.editSetId=null;
+    openMo("mo-set"); return;
+  }
+
+  /* ── 드롭존 클릭 ── */
+  var dznEl = t.classList.contains("dropzone-new") ? t : t.closest(".dropzone-new");
+  if (dznEl) {
+    var ds2=dznEl.getAttribute("data-subj"), dg2=dznEl.getAttribute("data-grade");
+    var fi2=document.getElementById("fi-"+ds2+"_"+dg2);
+    if (fi2) fi2.click();
     return;
   }
 
-  /* 학년별 드롭존 클릭 */
-  var dzGrade = null;
-  var dzEl = t.closest(".grade-upload-zone");
-  if (dzEl) { dzGrade = dzEl.getAttribute("data-grade"); }
-  if (dzGrade) {
-    var fi = document.getElementById("fi-"+dzGrade);
-    if (fi) fi.click();
+  /* ── 대시보드 과목 박스 클릭 ── */
+  var gotoUpSubj = t.getAttribute("data-goto-up-subj") ||
+    (t.closest("[data-goto-up-subj]") ? t.closest("[data-goto-up-subj]").getAttribute("data-goto-up-subj") : null);
+  if (gotoUpSubj) { APP._upSubj=gotoUpSubj; ap("up"); return; }
+
+  /* ── 대시보드 학년 박스 클릭 ── */
+  var gotoUp = t.getAttribute("data-goto-up") ||
+    (t.closest("[data-goto-up]") ? t.closest("[data-goto-up]").getAttribute("data-goto-up") : null);
+  if (gotoUp) { APP._upGrade=gotoUp; ap("up"); return; }
+
+  /* ── data 속성 기반 ── */
+  var editSet = t.getAttribute("data-edit-set");
+  if (editSet) { openEditSet(editSet); return; }
+
+  var qset = t.getAttribute("data-qset");
+  if (qset) { qSet(qset); return; }
+
+  var spp = t.getAttribute("data-sp");
+  if (spp) { sp(spp); return; }
+
+  var prev = t.getAttribute("data-prev");
+  if (prev) { prevSet(prev); return; }
+
+  var plId = t.getAttribute("data-pl");
+  if (plId) {
+    var plEl=document.getElementById(plId);
+    if (plEl) plEl.style.display=plEl.style.display==="none"?"block":"none";
     return;
   }
 
-  var dset=t.getAttribute("data-del-set");
-  if(dset){ openDelModal(dset); return; }
-  var det=t.getAttribute("data-det");
-  if(det){var dp=document.getElementById(det);if(dp)dp.classList.toggle("open");return;}
-  var dstu=t.getAttribute("data-del-stu");
-  if(dstu){DB.xs=(DB.xs||[]).filter(function(s){return s.id!==dstu;});DB.recs=DB.recs.filter(function(r){return r.uid!==dstu;});sdb();showToast("삭제","err");ap("stus");return;}
+  var dset = t.getAttribute("data-del-set");
+  if (dset) { openDelModal(dset); return; }
 
-  /* 보기 클릭 */
-  var li=t.classList.contains("ci")?t:t.closest(".ci");
-  if(li&&!li.classList.contains("fz")&&APP.q&&!APP.q.done){
-    var pid=li.getAttribute("data-pid"),v=li.getAttribute("data-v");
+  var dstu = t.getAttribute("data-del-stu");
+  if (dstu) {
+    DB.xs=(DB.xs||[]).filter(function(s){return s.id!==dstu;});
+    DB.recs=DB.recs.filter(function(r){return r.uid!==dstu;});
+    sdb(); showToast("삭제","err"); ap("stus"); return;
+  }
+
+  var det = t.getAttribute("data-det");
+  if (det) {
+    var dp=document.getElementById(det);
+    if (dp) dp.classList.toggle("open");
+    return;
+  }
+
+  /* ── 보기 클릭 (객관식) ── */
+  var li = t.classList.contains("ci") ? t : t.closest(".ci");
+  if (li && !li.classList.contains("fz") && APP.q && !APP.q.done) {
+    var pid=li.getAttribute("data-pid"), v=li.getAttribute("data-v");
     APP.q.ans[pid]=v;
     var blk=document.getElementById("pb-"+pid);
-    if(blk)blk.querySelectorAll(".ci").forEach(function(el3){
-      var on=el3.getAttribute("data-v")===v&&el3.getAttribute("data-pid")===pid;
-      if(on){el3.classList.add("sel");el3.classList.remove("corr","wrng");}
-      else{el3.classList.remove("sel","corr","wrng");}
+    if (blk) blk.querySelectorAll(".ci").forEach(function(el3){
+      var on=el3.getAttribute("data-v")===v && el3.getAttribute("data-pid")===pid;
+      if (on) { el3.classList.add("sel"); el3.classList.remove("corr","wrng"); }
+      else    { el3.classList.remove("sel","corr","wrng"); }
       var cc=el3.querySelector(".cc");
-      if(cc){cc.style.background=on?"var(--bl)":"";cc.style.borderColor=on?"var(--bl)":"";cc.style.color=on?"#fff":"";}
+      if (cc) {
+        cc.style.background=on?"var(--bl)":"";
+        cc.style.borderColor=on?"var(--bl)":"";
+        cc.style.color=on?"#fff":"";
+      }
     });
-    updCnt();return;
+    updCnt(); return;
   }
 
-  /* 홈 카드 클릭 */
-  var ac=t.classList.contains("ac")?t:t.closest(".ac");
-  if(ac){var ssp=ac.getAttribute("data-sp");if(ssp){sp(ssp);return;}}
+  /* ── 홈 카드 클릭 ── */
+  var ac = t.classList.contains("ac") ? t : t.closest(".ac");
+  if (ac) { var acsp=ac.getAttribute("data-sp"); if (acsp) sp(acsp); return; }
 });
-
-/* 키보드 */
-document.addEventListener("keydown",function(e){
-  if(e.key==="Enter"){
-    if(e.target.id==="s-nm"||e.target.id==="s-pw")sLogin();
-    if(e.target.id==="a-id"||e.target.id==="a-pw")aLogin();
-  }
-});
-
-/* 주관식 입력 */
-document.addEventListener("input",function(e){
-  var t=e.target;
-  if(!APP.q||APP.q.done)return;
-  var pid=t.getAttribute("data-pid");
-  if(pid){APP.q.ans[pid]=t.value;updCnt();}
-});
-
-
-
 
 /* 과목·학년별 드롭존 drag/drop */
 document.addEventListener("dragover", function(e) {
