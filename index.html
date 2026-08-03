@@ -1499,144 +1499,181 @@ function parseTxt(raw) {
   var CC = "①②③④⑤";
 
   function cleanTeX(s) {
-    s = s.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, "$1/$2");
-    s = s.replace(/\\dots|\\cdots/g, "...");
-    s = s.replace(/\\times/g, "×");
-    s = s.replace(/\\div/g, "÷");
-    s = s.replace(/\\sqrt\{([^}]+)\}/g, "√$1");
-    s = s.replace(/\^\{([^}]+)\}/g, "^$1");
-    s = s.replace(/\\[a-zA-Z]+\{([^}]*)\}/g, "$1");
-    s = s.replace(/\\[a-zA-Z]+/g, "");
+    s = s.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g,"$1/$2");
+    s = s.replace(/\\dots|\\cdots/g,"...");
+    s = s.replace(/\\times/g,"×"); s = s.replace(/\\div/g,"÷");
+    s = s.replace(/\\sqrt\{([^}]+)\}/g,"√$1");
+    s = s.replace(/\^\{([^}]+)\}/g,"^$1");
+    s = s.replace(/\\[a-zA-Z]+\{([^}]*)\}/g,"$1");
+    s = s.replace(/\\[a-zA-Z]+/g,"");
     return s.trim();
   }
 
-  /* 메타 */
-  var name = "업로드 문제집", grade = "", type_ = "단원평가", school = "";
-  var gm = raw.match(/(\d)학년/); if (gm) grade = "중" + gm[1];
-  if (/중간고사/.test(raw)) type_ = "중간고사";
-  else if (/기말고사/.test(raw)) type_ = "기말고사";
-  else if (/모의/.test(raw)) type_ = "모의고사";
-  var sm = raw.match(/([가-힣]+(?:중학교|고등학교|초등학교))/); if (sm) school = sm[1];
-  var tm = raw.match(/([가-힣A-Za-z\s]+(?:중간고사|기말고사|단원평가|모의고사)[^\n]{0,30})/);
-  if (tm) name = tm[1].trim().slice(0, 60);
+  var name="업로드 문제집",grade="",type_="단원평가",school="";
+  var gm=raw.match(/(\d)학년/); if(gm) grade="중"+gm[1];
+  if(/중간고사/.test(raw)) type_="중간고사";
+  else if(/기말고사/.test(raw)) type_="기말고사";
+  else if(/모의/.test(raw)) type_="모의고사";
+  var sm=raw.match(/([가-힣]+(?:중학교|고등학교|초등학교))/); if(sm) school=sm[1];
+  var tm=raw.match(/([가-힣A-Za-z\s]+(?:중간고사|기말고사|단원평가|모의고사)[^\n]{0,30})/);
+  if(tm) name=tm[1].trim().slice(0,60);
 
-  /* 정답표 */
-  var ansMap = {};
-  var aMatch = raw.match(/(?:정답표?|정답\s*및|Answer Key)[\s\S]{0,3000}/i);
-  if (aMatch) {
-    var aRe = /(\d+)\s+([①②③④⑤]|\d+)/g, am2;
-    while ((am2 = aRe.exec(aMatch[0])) !== null) {
-      var aidx = CC.indexOf(am2[2]);
-      ansMap[parseInt(am2[1])] = aidx >= 0 ? String(aidx + 1) : am2[2];
+  var ansMap={};
+  var aMatch=raw.match(/(?:정답표?|정답\s*및|Answer Key)[\s\S]{0,3000}/i);
+  if(aMatch){
+    var aRe=/(\d+)\s+([①②③④⑤]|\d+)/g,am2;
+    while((am2=aRe.exec(aMatch[0]))!==null){
+      var aidx=CC.indexOf(am2[2]);
+      ansMap[parseInt(am2[1])]=aidx>=0?String(aidx+1):am2[2];
     }
   }
 
-  /* 노이즈 패턴 */
-  var NOISE = [
-    /^──+/, /^\[지문/, /^\[단원명\]/, /^\[시험\s*시간\]/, /^\[성취\s*기준\]/,
-    /^\[문항/, /^문항\s*\d+[~\-]/, /^제\s*\d+\s*단원/,
-    /^\(가\)\s/, /^\(나\)\s/, /^\(다\)\s/, /^\(라\)\s/, /^\(마\)\s/,
-    /^확인하기$/, /^핵심\s*(구성|개념)/, /^RH[AS]\s*합동/,
-    /^Insight/i, /^중략/, /^\.{3}/, /^정답\s*및\s*해설/, /^Solution/i,
+  var NOISE=[
+    /^\[단원명\]/,/^\[시험\s*시간\]/,/^\[성취\s*기준\]/,
+    /^\[문항\s*\d/,/^문항\s*\d+[~\-]/,/^제\s*\d+\s*단원/,
+    /^확인하기$/,/^핵심\s*(?:구성|개념)/,/^RH[AS]\s*합동/,
+    /^Insight/i,/^중략/,/^\.{3}/,/^정답\s*및\s*해설/,/^Solution/i
   ];
-  function isNoise(line) { return NOISE.some(function(p) { return p.test(line.trim()); }); }
+  function isNoise(line){return NOISE.some(function(p){return p.test(line.trim());});}
 
-  /* 긴 지문 단락 감지 */
-  function isPassage(line) {
-    if (line.length < 60) return false;
-    if (/^\[Q\d+\]/.test(line)) return false;
-    if (/^\([하중상최상]+\)/.test(line)) return false;
-    if (/^\d{1,3}\./.test(line)) return false;
-    if (/[①②③④⑤]/.test(line)) return false;
-    if (/[다이가은는을를에서이다\.하여,]\s*$/.test(line) && !/\?$/.test(line)) return true;
+  /* 지문 헤더 감지 */
+  function isPassageHeader(line){
+    return /^──+/.test(line)||
+           /^\[지문/.test(line)||
+           /^※\s*다음/.test(line)||
+           /^○\s*다음/.test(line)||
+           /^【지문/.test(line)||
+           /^〔지문/.test(line)||
+           /^다음\s*(?:글|소설|시|수필|지문|내용|문장)?(?:을\s*)?읽고/.test(line)||
+           /^다음\s*\[[가-힣A-Za-z]+\]/.test(line)||
+           /^Read the following/.test(line);
+  }
+
+  /* 지문 단락 감지 */
+  function isPassagePara(line){
+    if(/^\([가나다라마바사아자차카타파하]\)/.test(line)) return true;
+    if(/^[A-E]\)\s+[A-Z]/.test(line)) return true;
+    if(line.length>=55&&
+       !/[①②③④⑤]/.test(line)&&
+       !/^\[Q\d+\]/.test(line)&&
+       !/^\([하중상최상기본심화]+\)/.test(line)&&
+       !/^\d{1,3}\s*[\.）]/.test(line)&&
+       !/\?$/.test(line.trim())) return true;
     return false;
   }
 
-  var DIFF = {"하":"하","중":"중","상":"상","최상":"최상","기본":"중","심화":"상","킬러":"최상","쉬움":"하","어려움":"상"};
+  var DIFF={"하":"하","중":"중","상":"상","최상":"최상","기본":"중","심화":"상","킬러":"최상","쉬움":"하","어려움":"상"};
 
-  function inlineCh(text) {
-    var res = [], re = /[①②③④⑤]\s*([^①②③④⑤\n]+)/g, cm;
-    while ((cm = re.exec(text)) !== null) res.push(cleanTeX(cm[1].trim()));
+  function inlineCh(text){
+    var res=[],re=/[①②③④⑤]\s*([^①②③④⑤\n]+)/g,cm;
+    while((cm=re.exec(text))!==null) res.push(cleanTeX(cm[1].trim()));
     return res;
   }
 
-  function collectCh(lines, si) {
-    var choices = [], i = si;
-    while (i < lines.length) {
-      var nl = lines[i].trim();
-      if (!nl) { i++; continue; }
-      if (/[①②③④⑤]/.test(nl)) {
-        var c = inlineCh(nl);
-        choices = choices.concat(c);
-        i++;
-        if (c.length === 1) continue;
-        else break;
+  function collectCh(lines,si){
+    var choices=[],i=si;
+    while(i<lines.length){
+      var nl=lines[i].trim();
+      if(!nl){i++;continue;}
+      if(/[①②③④⑤]/.test(nl)){
+        var c=inlineCh(nl); choices=choices.concat(c); i++;
+        if(c.length===1) continue; else break;
       }
       break;
     }
-    return { choices: choices, ni: i };
+    return{choices:choices,ni:i};
   }
 
-  function isEssay(q) { return /서술|증명|과정|기술|설명하|이유를\s*쓰/.test(q); }
-  function stripCh(t) { return t.replace(/[①②③④⑤][^①②③④⑤]*/g, "").trim(); }
+  function isEssay(q){return /서술|증명|과정|기술|설명하|이유를\s*쓰|서술하시오|쓰시오/.test(q);}
+  function stripCh(t){return t.replace(/[①②③④⑤][^①②③④⑤]*/g,"").trim();}
 
-  var probs = [], lines = raw.split("\n"), i = 0, nc = 0;
+  var probs=[],lines=raw.split("\n"),i=0,nc=0;
+  var curPassage="",curPassageLabel="",inPassage=false;
 
-  while (i < lines.length) {
-    var line = lines[i].trim(); i++;
-    if (!line || isNoise(line) || isPassage(line)) continue;
+  while(i<lines.length){
+    var line=lines[i].trim(); i++;
+    if(!line||isNoise(line)) continue;
 
-    /* [QN] 형식 */
-    var mQ = line.match(/^\[Q(\d+)\]\s*(?:\([^)]+\)\s*)?(?:\[([하중상최상기본심화킬러]+)\]\s*)?(.+?)(?:\s*\[(\d+(?:\.\d+)?)점\])?$/);
-    if (mQ) {
-      var qNo = parseInt(mQ[1]);
-      var q = cleanTeX(mQ[3].trim());
-      var pts = mQ[4] ? Math.round(parseFloat(mQ[4])) : 2;
-      var diff = DIFF[mQ[2] || "중"] || "중";
-      var cr = collectCh(lines, i); var ch = cr.choices; i = cr.ni;
-      var pt = ch.length >= 2 ? "obj" : isEssay(q) ? "essay" : "subj";
-      probs.push({ id:"p"+qNo, no:qNo, q:q, choices:ch.slice(0,5), type:pt, diff:diff, pts:pts, ans:ansMap[qNo]||"", tag:"", exp:"" });
+    /* 지문 헤더 → 지문 수집 시작 */
+    if(isPassageHeader(line)){
+      inPassage=true;
+      curPassage="";
+      var lm=line.match(/\[(?:지문\s*)?([A-Z가-힣\d]+)\]/);
+      curPassageLabel=lm?"[지문 "+lm[1]+"]":"[지문]";
+      curPassage+=line+"\n";
       continue;
     }
 
-    /* (난이도) 형식 */
-    var mD = line.match(/^\(([하중상최상기본심화킬러쉬움어려움]+)\)\s*(.{5,})/);
-    if (mD) {
-      var diff2 = DIFF[mD[1]] || "중";
-      var q2 = cleanTeX(mD[2].trim());
-      var pm = q2.match(/\((\d+)점\)/);
-      var pts2 = pm ? parseInt(pm[1]) : 3; if (pm) q2 = q2.replace(pm[0], "").trim();
-      var ic = inlineCh(q2);
-      var ch2; var i2;
-      if (ic.length) { q2 = stripCh(q2); ch2 = ic; }
-      else { var cr2 = collectCh(lines, i); ch2 = cr2.choices; i = cr2.ni; }
+    /* 지문 단락 수집 */
+    if(inPassage&&isPassagePara(line)){
+      curPassage+=line+"\n";
+      continue;
+    }
+
+    /* 문제 여부 판단 */
+    var isProb=/^\[Q\d+\]/.test(line)||
+               /^\([하중상최상기본심화킬러쉬움어려움]+\)/.test(line)||
+               (/^\d{1,3}\s*[\.）]/.test(line)&&!isNoise(line));
+
+    if(inPassage&&!isProb){
+      /* 짧은 서술, 대화문 등도 지문에 포함 */
+      curPassage+=line+"\n";
+      continue;
+    }
+    if(inPassage) inPassage=false; /* 문제 시작 → 지문 블록 확정 */
+
+    var passage=curPassage.trim();
+
+    /* ── [QN] 형식 ── */
+    var mQ=line.match(/^\[Q(\d+)\]\s*(?:\([^)]+\)\s*)?(?:\[([하중상최상기본심화킬러]+)\]\s*)?(.+?)(?:\s*\[(\d+(?:\.\d+)?)점\])?$/);
+    if(mQ){
+      var qNo=parseInt(mQ[1]),q=cleanTeX(mQ[3].trim()),pts=mQ[4]?Math.round(parseFloat(mQ[4])):2;
+      var diff=DIFF[mQ[2]||"중"]||"중";
+      var cr=collectCh(lines,i); var ch=cr.choices; i=cr.ni;
+      var pt=ch.length>=2?"obj":isEssay(q)?"essay":"subj";
+      probs.push({id:"p"+qNo,no:qNo,q:q,choices:ch.slice(0,5),type:pt,diff:diff,pts:pts,
+        ans:ansMap[qNo]||"",tag:curPassageLabel,exp:"",passage:passage,hasPassage:!!passage});
+      continue;
+    }
+
+    /* ── (난이도) 형식 ── */
+    var mD=line.match(/^\(([하중상최상기본심화킬러쉬움어려움]+)\)\s*(.{5,})/);
+    if(mD){
+      var diff2=DIFF[mD[1]]||"중",q2=cleanTeX(mD[2].trim());
+      var pm=q2.match(/\((\d+)점\)/),pts2=pm?parseInt(pm[1]):3; if(pm) q2=q2.replace(pm[0],"").trim();
+      var ic=inlineCh(q2),ch2;
+      if(ic.length){q2=stripCh(q2);ch2=ic;}
+      else{var cr2=collectCh(lines,i);ch2=cr2.choices;i=cr2.ni;}
       nc++;
-      var pt2 = ch2.length >= 2 ? "obj" : isEssay(q2) ? "essay" : "subj";
-      probs.push({ id:"p"+nc, no:nc, q:q2, choices:ch2.slice(0,5), type:pt2, diff:diff2, pts:ch2.length?pts2:(pt2==="essay"?8:5), ans:ansMap[nc]||"", tag:"", exp:"" });
+      var pt2=ch2.length>=2?"obj":isEssay(q2)?"essay":"subj";
+      probs.push({id:"p"+nc,no:nc,q:q2,choices:ch2.slice(0,5),type:pt2,diff:diff2,
+        pts:ch2.length?pts2:(pt2==="essay"?8:5),
+        ans:ansMap[nc]||"",tag:curPassageLabel,exp:"",passage:passage,hasPassage:!!passage});
       continue;
     }
 
-    /* 번호. 형식 */
-    var mN = line.match(/^(\d{1,3})\s*[\.）]\s*(.{5,})/);
-    if (mN) {
-      var bNo = parseInt(mN[1]);
-      var bQ = cleanTeX(mN[2].trim());
-      if (isNoise(bQ.slice(0,20))) continue;
-      if (/^(?:단원|영역|문항\s*\d+~|단계|PART|파트|확인|해설)/.test(bQ.slice(0,20))) continue;
-      var bpm = bQ.match(/\((\d+(?:\.\d+)?)점\)/);
-      var bpts = bpm ? Math.round(parseFloat(bpm[1])) : 4; if (bpm) bQ = bQ.replace(bpm[0], "").trim();
-      var bic = inlineCh(bQ);
-      var bch;
-      if (bic.length) { bQ = stripCh(bQ); bch = bic; }
-      else { var bcr = collectCh(lines, i); bch = bcr.choices; i = bcr.ni; }
-      var bpt = bch.length >= 2 ? "obj" : isEssay(bQ) ? "essay" : "subj";
-      probs.push({ id:"p"+bNo, no:bNo, q:bQ, choices:bch.slice(0,5), type:bpt, diff:"중", pts:bpts, ans:ansMap[bNo]||"", tag:"", exp:"" });
+    /* ── 번호. 형식 ── */
+    var mN=line.match(/^(\d{1,3})\s*[\.）]\s*(.{5,})/);
+    if(mN){
+      var bNo=parseInt(mN[1]),bQ=cleanTeX(mN[2].trim());
+      if(isNoise(bQ.slice(0,20))) continue;
+      if(/^(?:단원|영역|문항\s*\d+~|단계|PART|파트|확인|해설)/.test(bQ.slice(0,20))) continue;
+      var bpm=bQ.match(/\((\d+(?:\.\d+)?)점\)/),bpts=bpm?Math.round(parseFloat(bpm[1])):4;
+      if(bpm) bQ=bQ.replace(bpm[0],"").trim();
+      var bic=inlineCh(bQ),bch;
+      if(bic.length){bQ=stripCh(bQ);bch=bic;}
+      else{var bcr=collectCh(lines,i);bch=bcr.choices;i=bcr.ni;}
+      var bpt=bch.length>=2?"obj":isEssay(bQ)?"essay":"subj";
+      probs.push({id:"p"+bNo,no:bNo,q:bQ,choices:bch.slice(0,5),type:bpt,diff:"중",pts:bpts,
+        ans:ansMap[bNo]||"",tag:curPassageLabel,exp:"",passage:passage,hasPassage:!!passage});
+      /* 번호. 형식은 지문 초기화 (문제마다 다른 지문 가능) */
+      curPassage=""; curPassageLabel="";
       continue;
     }
   }
 
-  probs.sort(function(a,b) { return a.no - b.no; });
-  return { name:name, grade:grade, type:type_, school:school, problems:probs };
+  probs.sort(function(a,b){return a.no-b.no;});
+  return{name:name,grade:grade,type:type_,school:school,problems:probs};
 }
 function openEditSet(sid) {
   var set = DB.sets.find(function(s){ return s.id===sid; });
@@ -2628,16 +2665,29 @@ function buildSheet() {
         +'</div>';
     }
 
-    return '<div class="pb" id="pb-'+p.id+'">'
+    /* 지문(제시문) 렌더링 */
+    var passHtml = "";
+    if (p.passage && p.passage.trim()) {
+      var pLines2 = p.passage.trim().split("\n");
+      var pFmt = pLines2.map(function(pl){
+        return /^\([가나다라마바사아자차카타파하]\)/.test(pl)
+          ? '<b style="color:var(--nv)">'+pl.slice(0,3)+'</b>'+pl.slice(3)
+          : pl;
+      }).join("<br>");
+      passHtml = '<div style="background:#f0f7ff;border-left:4px solid var(--bl);'
+        +'border-radius:0 8px 8px 0;padding:10px 13px;margin:4px 0 8px 30px;'
+        +'font-size:12.5px;line-height:1.8;color:#1e2535">'
+        +(p.tag?'<div style="font-size:10.5px;font-weight:800;color:var(--bl);margin-bottom:6px">'+p.tag+'</div>':"")
+        +pFmt+'</div>';
+    }
+    return '<div class="pb" id="pb-'+p.id+'">'+passHtml
       +'<div class="prow">'
       +'<div class="pnc">'+(gi+1)+'</div>'
-      +'<div class="ptxt">'+p.q+'<span class="ppts">('+( p.pts||4)+'점)</span></div>'
+      +'<div class="ptxt">'+p.q+'<span class="ppts">('+(p.pts||4)+'점)</span></div>'
       +'</div>'
       +inp+solH+'</div>';
-  }
+  }  /* end rP */
 
-  /* 결과 배너 */
-  var msg=pct>=90?"🏆 최우수! 완벽!":pct>=80?"🎉 우수!":pct>=60?"💪 오답 복습!":"📚 집중 복습 필요.";
   var resH="";
   if(done){
     resH='<div class="resb noprint">'
@@ -2671,7 +2721,7 @@ function buildSheet() {
     +'<div class="paper-wrap">'
     +'<div class="ph">'
     +'<div class="ph-top">'
-    +'<div class="ph-school">'+(set.school||"이든X학원")+(set.grade?" | "+set.grade+" 수학":"")+'</div>'
+    +'<div class="ph-school">'+(set.school||"이든X학원")+(set.grade?" | "+set.grade+(set.subject?" "+set.subject:""):"")+'</div>'
     +'<div class="ph-title">'+(wm?"오 답 재 도 전":set.name)+'</div>'
     +'<div class="ph-date">'+ds+'</div>'
     +'</div>'
@@ -2713,7 +2763,26 @@ function buildSheet() {
       +'<button class="btn bn bsm" id="dl-btn3">📥 다운로드</button>'
       +'</div></div>':"")
     +'</div>'; /* /ew */
-  return h;
+  /* ── 지문(제시문) 렌더링 ── */
+    var passHtml = "";
+    if (p.passage && p.passage.trim()) {
+      var pLines2 = p.passage.trim().split("\n");
+      var pFmt = pLines2.map(function(pl) {
+        return /^\([가나다라마바사아자차카타파하]\)/.test(pl)
+          ? '<b style="color:var(--nv)">'+pl.slice(0,3)+'</b>'+pl.slice(3)
+          : pl;
+      }).join("<br>");
+      passHtml = '<div style="background:#f0f7ff;border-left:4px solid var(--bl);'
+        +'border-radius:0 8px 8px 0;padding:10px 13px;margin:4px 0 8px 30px;'
+        +'font-size:12.5px;line-height:1.8;color:#1e2535">'
+        +(p.tag ? '<div style="font-size:10.5px;font-weight:800;color:var(--bl);margin-bottom:6px">'+p.tag+'</div>' : "")
+        +pFmt+'</div>';
+    }
+    return '<div class="pb" id="pb-'+p.id+'">'+passHtml
+      +'<div class="prow">'
+      +'<div class="pnc">'+(gi+1)+'</div>'
+      +'<div class="ptxt">'+p.q+'<span class="ppts">('+(p.pts||4)+'점)</span></div>'
+      +'</div>'
 }
 
 /* 채점 */
