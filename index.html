@@ -897,6 +897,18 @@ button,input,select,textarea{font-family:inherit}
 .adm-quick-btn{flex:1;padding:9px;border:2px solid var(--br);border-radius:7px;background:#f8fafc;font-size:12px;font-weight:700;color:var(--mu);cursor:pointer;transition:all .15s;text-align:center}
 .adm-quick-btn:hover{border-color:var(--bl);color:var(--bl);background:#eff6ff}
 
+
+/* ── PDF 업로드 상태 ── */
+.pdf-processing{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:28px 20px;background:#fff;border:2px solid var(--bl);border-radius:12px;
+  text-align:center;gap:10px}
+.pdf-spinner{width:36px;height:36px;border:4px solid #dbeafe;border-top-color:var(--bl);
+  border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.pdf-log{font-size:11.5px;color:var(--mu);max-height:120px;overflow-y:auto;
+  text-align:left;background:#f8fafc;border-radius:6px;padding:8px 10px;
+  width:100%;border:1px solid var(--br);white-space:pre-wrap}
+
 </style>
 </head>
 <body>
@@ -1193,6 +1205,150 @@ function sLogin() {
 /* ─────────────────────────────────────────
    TXT 파서
 ───────────────────────────────────────── */
+
+/* ══════════════════════════════════════════════════
+   PDF → 문제 추출 (Anthropic API 활용)
+   PDF를 base64로 읽어 Claude에게 전송 →
+   파싱된 문제 JSON 반환
+══════════════════════════════════════════════════ */
+function isPdfFile(file) {
+  return file.name.toLowerCase().endsWith('.pdf') ||
+         file.type === 'application/pdf';
+}
+
+function readFileAsBase64(file) {
+  return new Promise(function(resolve, reject) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      /* e.target.result = "data:application/pdf;base64,..." */
+      var b64 = e.target.result.split(',')[1];
+      resolve(b64);
+    };
+    reader.onerror = function() { reject(new Error('파일 읽기 실패')); };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function processPdfFile(file, subj, grade) {
+  var boxKey = subj + '_' + grade;
+  var resEl = document.getElementById('res-' + boxKey);
+
+  /* 처리 중 UI */
+  if (resEl) {
+    resEl.innerHTML = '<div class="pdf-processing">'
+      + '<div class="pdf-spinner"></div>'
+      + '<div style="font-size:14px;font-weight:700;color:var(--nv)">📄 PDF 분석 중...</div>'
+      + '<div style="font-size:12.5px;color:var(--mu)">Claude AI가 문제를 추출하고 있습니다</div>'
+      + '<div class="pdf-log" id="pdf-log-' + boxKey + '">PDF 파일 읽는 중...\n</div>'
+      + '</div>';
+  }
+
+  function log(msg) {
+    var logEl = document.getElementById('pdf-log-' + boxKey);
+    if (logEl) { logEl.textContent += msg + '\n'; logEl.scrollTop = logEl.scrollHeight; }
+  }
+
+  try {
+    log('PDF를 base64로 변환 중...');
+    var b64 = await readFileAsBase64(file);
+    log('PDF 변환 완료 (' + Math.round(b64.length * 0.75 / 1024) + ' KB)');
+    log('Claude AI에 전송 중...');
+
+    var prompt = '이 PDF는 학교 시험 문제지입니다.\n'
+      + '과목: ' + subj + ', 학년: ' + (grade||'미지정') + '\n\n'
+      + '다음 규칙에 따라 JSON을 반환하세요:\n'
+      + '1. 지문(제시문)이 있으면 passage 필드에 넣어 해당 문제들에 연결\n'
+      + '2. 객관식: type="obj", choices 배열에 보기 5개\n'
+      + '3. 주관식: type="subj", choices=[]\n'
+      + '4. 서술형: type="essay", choices=[]\n'
+      + '5. 난이도: diff = 하/중/상/최상\n'
+      + '6. 정답이 있으면 ans 필드에 (객관식은 1~5 숫자)\n\n'
+      + '반드시 아래 JSON 형식만 반환하고 다른 텍스트는 절대 쓰지 마세요:\n'
+      + '{"name":"문제집명","grade":"학년","type":"단원평가|중간고사|기말고사","school":"학교명","problems":['
+      + '{"id":"p1","no":1,"q":"문제 내용","choices":["보기1","보기2","보기3","보기4","보기5"],'
+      + '"type":"obj","diff":"중","pts":4,"ans":"2","tag":"[지문 A]","exp":"","passage":"지문 내용 또는 빈 문자열","hasPassage":false}'
+      + ']}';
+
+    var response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 4000,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'document',
+              source: { type: 'base64', media_type: 'application/pdf', data: b64 }
+            },
+            { type: 'text', text: prompt }
+          ]
+        }]
+      })
+    });
+
+    if (!response.ok) {
+      var errText = await response.text();
+      throw new Error('API 오류 ' + response.status + ': ' + errText.slice(0,200));
+    }
+
+    var data = await response.json();
+    log('Claude 응답 수신 완료');
+
+    var raw = data.content && data.content[0] && data.content[0].text
+      ? data.content[0].text.trim() : '';
+
+    /* JSON 추출 */
+    var jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('JSON을 찾을 수 없습니다. 응답: ' + raw.slice(0,200));
+
+    var parsed = JSON.parse(jsonMatch[0]);
+    if (!parsed.problems || !parsed.problems.length) {
+      throw new Error('추출된 문제가 없습니다.');
+    }
+    log('문제 ' + parsed.problems.length + '개 추출 완료!');
+
+    /* ID 정규화 */
+    parsed.problems.forEach(function(p, i) {
+      p.id = 'p' + (p.no || (i+1));
+      if (!p.tag) p.tag = '';
+      if (!p.exp) p.exp = '';
+      if (!p.passage) p.passage = '';
+      if (p.hasPassage === undefined) p.hasPassage = !!p.passage;
+    });
+
+    /* 저장 */
+    var set = saveUploadedProbs(parsed.problems, subj, grade, null);
+    if (!set) throw new Error('저장 실패');
+    if (parsed.name && parsed.name !== '업로드 문제집') set.name = parsed.name;
+    if (parsed.school) set.school = parsed.school;
+    if (parsed.type) set.type = parsed.type;
+    sdb();
+
+    /* 결과 표시 */
+    if (resEl) {
+      resEl.innerHTML = buildUpSuccessHtml(set, boxKey);
+    }
+    updateSubjTabCount();
+    showToast(subj + ' ' + grade + ' PDF ' + parsed.problems.length + '문제 ✅', 'ok');
+
+  } catch(err) {
+    var logEl = document.getElementById('pdf-log-' + boxKey);
+    if (logEl) logEl.textContent += '❌ 오류: ' + err.message + '\n';
+    if (resEl) {
+      resEl.innerHTML = '<div style="background:#fff5f5;border:1.5px solid #fca5a5;'
+        + 'border-radius:9px;padding:14px 16px;font-size:13px">'
+        + '<strong style="color:var(--rd)">❌ PDF 처리 실패</strong><br>'
+        + '<span style="color:#555">' + err.message + '</span><br><br>'
+        + '<span style="color:var(--mu);font-size:12px">💡 PDF 텍스트 추출이 안 되는 경우 '
+        + '텍스트를 직접 붙여넣기로 업로드해 주세요.</span>'
+        + '</div>';
+    }
+    showToast('PDF 처리 실패: ' + err.message.slice(0,40), 'err');
+  }
+}
+
 function readAuto(file, cb) {
   var r = new FileReader();
   r.onload = function(e) {
@@ -2039,9 +2195,9 @@ function rUp() {
         +'<div class="dz-ic2">'+subj.icon+'</div>'
         +'<div class="dz-text">'
         +'<strong>'+subj.id+' '+g+' 문제 파일 업로드</strong>'
-        +'<span>TXT / JSON 클릭 또는 드래그 · ANSI/UTF-8 자동 인식</span>'
+        +'<span>TXT / JSON · <span style="color:var(--rd);font-weight:700">PDF</span> 클릭 또는 드래그 · ANSI/UTF-8 자동 인식</span>'
         +'</div></div></div>'
-        +'<input type="file" id="fi-'+boxKey+'" data-subj="'+subj.id+'" data-grade="'+g+'" accept=".txt,.json" style="display:none">'
+        +'<input type="file" id="fi-'+boxKey+'" data-subj="'+subj.id+'" data-grade="'+g+'" accept=".txt,.json,.pdf" style="display:none">'
         +'</div>'
 
         /* 붙여넣기 탭 */
@@ -3014,26 +3170,7 @@ function buildSheet() {
       +'<button class="btn bn bsm" id="dl-btn3">📥 다운로드</button>'
       +'</div></div>':"")
     +'</div>'; /* /ew */
-  /* ── 지문(제시문) 렌더링 ── */
-    var passHtml = "";
-    if (p.passage && p.passage.trim()) {
-      var pLines2 = p.passage.trim().split("\n");
-      var pFmt = pLines2.map(function(pl) {
-        return /^\([가나다라마바사아자차카타파하]\)/.test(pl)
-          ? '<b style="color:var(--nv)">'+pl.slice(0,3)+'</b>'+pl.slice(3)
-          : pl;
-      }).join("<br>");
-      passHtml = '<div style="background:#f0f7ff;border-left:4px solid var(--bl);'
-        +'border-radius:0 8px 8px 0;padding:10px 13px;margin:4px 0 8px 30px;'
-        +'font-size:12.5px;line-height:1.8;color:#1e2535">'
-        +(p.tag ? '<div style="font-size:10.5px;font-weight:800;color:var(--bl);margin-bottom:6px">'+p.tag+'</div>' : "")
-        +pFmt+'</div>';
-    }
-    return '<div class="pb" id="pb-'+p.id+'">'+passHtml
-      +'<div class="prow">'
-      +'<div class="pnc">'+(gi+1)+'</div>'
-      +'<div class="ptxt">'+p.q+'<span class="ppts">('+(p.pts||4)+'점)</span></div>'
-      +'</div>'
+  return h;
 }
 
 /* 채점 */
@@ -3452,6 +3589,8 @@ document.addEventListener("change", function(e) {
     var f=t.files[0]; if(!f) return; t.value="";
     if(f.name.endsWith(".json")){
       var r=new FileReader(); r.onload=function(ev){impJSONSubj(ev.target.result,subj,grade);}; r.readAsText(f,"UTF-8");
+    } else if(isPdfFile(f)) {
+      processPdfFile(f, subj, grade);
     } else { readAuto(f,function(raw){procTxtSubj(raw,subj,grade);}); }
   }
 });
@@ -3506,6 +3645,8 @@ document.addEventListener("drop", function(e) {
     var f2=e.dataTransfer.files[0]; if(!f2) return;
     if(f2.name.endsWith(".json")){
       var r2=new FileReader(); r2.onload=function(ev){impJSONSubj(ev.target.result,subj2,grade2);}; r2.readAsText(f2,"UTF-8");
+    } else if(isPdfFile(f2)) {
+      processPdfFile(f2, subj2, grade2);
     } else { readAuto(f2,function(raw2){procTxtSubj(raw2,subj2,grade2);}); }
     return;
   }
