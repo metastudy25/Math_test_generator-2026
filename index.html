@@ -803,6 +803,84 @@ button,input,select,textarea{font-family:inherit}
 .tbl tr:hover .del-btn-show { opacity:1; }
 .del-btn-show { transition:opacity .15s; }
 
+
+/* ══ 학생 과목 선택 ══ */
+.stu-subj-tabs {
+  display:flex; gap:4px; flex-wrap:wrap; margin-bottom:14px;
+  background:#f0f4fa; border-radius:10px; padding:4px;
+}
+.stu-subj-tab {
+  flex:1; min-width:60px; padding:9px 6px; border:none; border-radius:7px;
+  background:transparent; font-size:13px; font-weight:700; color:var(--mu);
+  cursor:pointer; transition:all .18s; text-align:center;
+}
+.stu-subj-tab:hover { background:rgba(255,255,255,.6); color:var(--nv); }
+.stu-subj-tab.on { background:#fff; color:var(--bl); box-shadow:0 2px 8px rgba(37,99,235,.15); }
+.stu-subj-tab .sst-ic { font-size:18px; display:block; margin-bottom:2px; }
+.stu-subj-tab .sst-cnt { font-size:10px; color:var(--mu); }
+.stu-subj-tab.on .sst-cnt { color:var(--bl); }
+
+/* 과목 섹션 */
+.stu-subj-panel { display:none; }
+.stu-subj-panel.on { display:block; }
+
+/* 문제집 카드 */
+.setc { background:#fff; border-radius:12px; border:2px solid var(--br);
+  padding:16px 18px; margin-bottom:10px; cursor:pointer;
+  transition:all .2s; box-shadow:var(--s1); }
+.setc:hover { border-color:var(--bl); box-shadow:var(--s2); transform:translateY(-1px); }
+.setc.done { border-color:var(--gn); }
+.setn { font-size:15px; font-weight:800; color:var(--nv); margin-bottom:6px; }
+
+/* 과목별 점수 카드 */
+.subj-score-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:16px; }
+.subj-score-box { background:#fff; border-radius:11px; border:1px solid var(--br);
+  padding:13px 10px; text-align:center; box-shadow:var(--s1); }
+.ssb-icon { font-size:22px; margin-bottom:4px; }
+.ssb-name { font-size:11px; color:var(--mu); font-weight:700; margin-bottom:5px; }
+.ssb-score { font-size:22px; font-weight:900; line-height:1; }
+.ssb-cnt { font-size:10.5px; color:var(--mu); margin-top:3px; }
+.ssb-bar { height:5px; background:#e2e8f0; border-radius:3px; margin-top:7px; overflow:hidden; }
+.ssb-bar-in { height:100%; border-radius:3px; transition:width .5s; }
+
+/* 동기화 상태 */
+.sync-status {
+  display:inline-flex; align-items:center; gap:5px;
+  font-size:11.5px; color:var(--mu); padding:4px 10px;
+  border-radius:20px; background:#f8fafc; border:1px solid var(--br);
+}
+.sync-dot { width:7px; height:7px; border-radius:50%; background:#94a3b8; }
+.sync-dot.ok { background:var(--gn); }
+.sync-dot.syncing { background:var(--gd); animation:pulse .8s infinite; }
+.sync-dot.err { background:var(--rd); }
+
+/* ══ 드래그 정렬 ══ */
+.drag-list { list-style:none; padding:0; margin:0; }
+.drag-item {
+  display:flex; align-items:center; gap:10px;
+  padding:13px 15px; border:1.5px solid var(--br); border-radius:9px;
+  background:#fff; margin-bottom:8px; cursor:grab;
+  transition:box-shadow .15s, opacity .15s;
+  user-select:none;
+}
+.drag-item:active { cursor:grabbing; }
+.drag-item.dragging { opacity:.4; box-shadow:0 8px 24px rgba(0,0,0,.18); }
+.drag-item.drag-over { border-color:var(--bl); border-style:dashed; background:#f0f7ff; }
+.drag-handle { font-size:18px; color:#cbd5e1; flex-shrink:0; cursor:grab; }
+.drag-item-info { flex:1; min-width:0; }
+.drag-item-name { font-size:14px; font-weight:800; color:var(--nv);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.drag-item-meta { font-size:11.5px; color:var(--mu); margin-top:2px; }
+.drag-item-actions { display:flex; gap:6px; flex-shrink:0; }
+.drag-order-badge { width:24px; height:24px; border-radius:50%;
+  background:#f1f5f9; color:var(--mu); font-size:11px; font-weight:800;
+  display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+
+@media(max-width:768px){
+  .subj-score-grid { grid-template-columns:repeat(3,1fr); }
+  .stu-subj-tab { min-width:50px; font-size:12px; }
+}
+
 </style>
 </head>
 <body>
@@ -1029,6 +1107,8 @@ function sLogin() {
   if (stu) {
     APP.u=stu; document.getElementById("sw").textContent=stu.n;
     showScr("ss"); sp("home");
+    /* 로그인 후 크로스 디바이스 동기화 */
+    syncAfterLogin(stu.id).catch(function(){});
   } else { document.getElementById("lerr").textContent="이름 또는 비밀번호가 맞지 않습니다."; }
 }
 
@@ -1280,184 +1360,233 @@ function confirmDelete() {
   ap(curId.replace("am-",""));
 }
 
-function parseTxt(raw) {
-  /* ══ 메타 추출 ══ */
-  var name="", grade="", type="단원평가", school="";
-  var tm = raw.match(/([가-힣A-Za-z\s]+(?:중간고사|기말고사|단원평가|모의고사|테스트)[^\n]*)/);
-  if (tm) name = tm[1].replace(/[#*_`\[\]IVXLC]+\.\s*/g,"").trim().slice(0,60);
-  if (!name) name = "업로드 문제집";
-  var gm = raw.match(/(\d)학년/); if (gm) grade = "중"+gm[1];
-  if (/중간고사/.test(raw)) type="중간고사";
-  else if (/기말고사/.test(raw)) type="기말고사";
-  else if (/모의/.test(raw)) type="모의고사";
-  var sm = raw.match(/([가-힣]+(?:중학교|고등학교|초등학교))/); if (sm) school=sm[1];
 
-  /* ══ 정답표 파싱 ══ */
-  var ansMap = {};
-  var aSection = (raw.match(/(?:정답표?|정답\s*및|Answer Key)[\s\S]{0,2000}/i)||[""])[0];
-  var aRe = /(\d+)\s+([①②③④⑤]|\d+(?:\.\d+)?(?:cm|°|도|개|점|%)?)/g, am;
-  while ((am=aRe.exec(aSection))!==null) {
-    var idx2="①②③④⑤".indexOf(am[2]);
-    ansMap[parseInt(am[1])] = idx2>=0 ? String(idx2+1) : am[2].trim();
+/* ══════════════════════════════════════════
+   크로스 디바이스 동기화 (window.storage)
+══════════════════════════════════════════ */
+var SYNC_KEY_PREFIX = "eden_rec_";
+var _syncStatus = "idle"; /* idle | syncing | ok | err */
+
+function syncStatusEl() { return document.getElementById("sync-status-dot"); }
+function setSyncStatus(s) {
+  _syncStatus = s;
+  var dot = syncStatusEl();
+  if (!dot) return;
+  dot.className = "sync-dot " + (s==="ok"?"ok":s==="syncing"?"syncing":s==="err"?"err":"");
+  var lbl = document.getElementById("sync-status-label");
+  if (lbl) lbl.textContent = s==="ok"?"동기화됨":s==="syncing"?"동기화 중...":s==="err"?"오프라인":"대기";
+}
+
+/* 기록 업로드 (채점 완료 시 호출) */
+async function pushRecord(rec) {
+  if (!window.storage || !APP.u) return;
+  try {
+    setSyncStatus("syncing");
+    var key = SYNC_KEY_PREFIX + APP.u.id + "_" + rec.id;
+    await window.storage.set(key, JSON.stringify(rec));
+    setSyncStatus("ok");
+  } catch(e) { setSyncStatus("err"); }
+}
+
+/* 기록 다운로드 (로그인 시 호출) */
+async function pullRecords(uid) {
+  if (!window.storage) return;
+  try {
+    setSyncStatus("syncing");
+    var prefix = SYNC_KEY_PREFIX + uid + "_";
+    var result = await window.storage.list(prefix);
+    if (!result || !result.keys || !result.keys.length) { setSyncStatus("ok"); return; }
+    var merged = 0;
+    for (var ki = 0; ki < result.keys.length; ki++) {
+      try {
+        var got = await window.storage.get(result.keys[ki]);
+        if (!got) continue;
+        var remote = JSON.parse(got.value);
+        if (!DB.recs.find(function(r){ return r.id===remote.id; })) {
+          DB.recs.push(remote); merged++;
+        }
+      } catch(e2) {}
+    }
+    if (merged) { sdb(); }
+    setSyncStatus("ok");
+  } catch(e) { setSyncStatus("err"); }
+}
+
+/* 로컬 기록 → 클라우드 전체 업로드 */
+async function pushAllRecords(uid) {
+  if (!window.storage) return;
+  var myRecs = DB.recs.filter(function(r){ return r.uid===uid; });
+  for (var ri=0; ri<myRecs.length; ri++) {
+    try {
+      var key = SYNC_KEY_PREFIX + uid + "_" + myRecs[ri].id;
+      await window.storage.set(key, JSON.stringify(myRecs[ri]));
+    } catch(e) {}
+  }
+}
+
+/* 로그인 후 동기화 */
+async function syncAfterLogin(uid) {
+  await pullRecords(uid);
+  await pushAllRecords(uid);
+}
+
+function parseTxt(raw) {
+  var CHOICE_CHARS = "①②③④⑤";
+
+  /* LaTeX 단순화 */
+  function cleanLaTeX(s) {
+    s = s.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, "$1/$2");
+    s = s.replace(/\\dots|\\cdots/g, "...");
+    s = s.replace(/\\times/g, "×");
+    s = s.replace(/\\div/g, "÷");
+    s = s.replace(/\\sqrt\{([^}]+)\}/g, "√$1");
+    s = s.replace(/\^\{([^}]+)\}/g, "^$1");
+    s = s.replace(/\\[a-zA-Z]+\{([^}]*)\}/g, "$1");
+    s = s.replace(/\\[a-zA-Z]+/g, "");
+    return s.trim();
   }
 
-  /* ══ 해설 파싱 ══ */
-  var expMap = {};
-  var eSection = (raw.match(/(?:전문가\s*해설|상세\s*해설|Expert)[\s\S]*/i)||[""])[0];
-  var eRe = /문항\s*(\d+)[,\s]*[^\n]*\n?([\s\S]*?)(?=\n\s*문항\s*\d+|$)/gi, em;
-  while ((em=eRe.exec(eSection))!==null)
-    expMap[parseInt(em[1])] = em[2].replace(/\*/g,"").trim().slice(0,300);
+  /* 메타 */
+  var name="업로드 문제집", grade="", type_="단원평가", school="";
+  var gm=raw.match(/(\d)학년/); if(gm) grade="중"+gm[1];
+  if(/중간고사/.test(raw)) type_="중간고사";
+  else if(/기말고사/.test(raw)) type_="기말고사";
+  else if(/모의/.test(raw)) type_="모의고사";
+  var sm=raw.match(/([가-힣]+(?:중학교|고등학교|초등학교))/); if(sm) school=sm[1];
+  var tm=raw.match(/([가-힣A-Za-z\s]+(?:중간고사|기말고사|단원평가|모의고사)[^\n]{0,30})/);
+  if(tm) name=tm[1].trim().slice(0,60);
 
-  /* ══ 노이즈 줄 필터 ══ */
-  var NOISE = [
-    /^\[문항\s*\d+/,            /* [문항 1~30] */
-    /^문항\s*\d+[~\-]\d+/,
-    /^제\s*\d+\s*단원/,         /* 제2단원: */
-    /^\[?\d*\s*영역\]?/,        /* [1영역] */
-    /^확인하기$/,
-    /^핵심\s*(구성|개념|포인트)/,
-    /^합동\s*조건/,
-    /^RH[AS]\s*합동/,
-    /^Insight/i,
-    /^\[정답/,
-    /^정답\s*및\s*해설/,
-    /^Solution/i,
-    /^▶|^►|^●|^■|^□|^※/,
-    /^이제\s|^이로써\s|^앞으로\s/,  /* 마무리 문장 */
-    /^다음\s*(단원|장|절|파트)/,
-    /^PART\s*\d+/i,
-    /^\(단,\s/,
-    /^즉,\s|^따라서\s/,
-    /^위\s*(성질|조건|정의)/,
-    /^핵심\s*구성/,
-    /중략/,
-    /^\.\.\./,
-    /^구성\s*요소/,
-    /^Insight\s/i,
-    /^직각삼각형의\s*합동:/,
-    /^이등변삼각형:/,
-    /^삼각형의\s*기본/,
+  /* 정답표 */
+  var ansMap={};
+  var aMatch=raw.match(/(?:정답표?|정답\s*및|Answer Key)[\s\S]{0,3000}/i);
+  if(aMatch){
+    var aRe=/(\d+)\s+([①②③④⑤]|\d+)/g, am;
+    while((am=aRe.exec(aMatch[0]))!==null){
+      var idx2=CHOICE_CHARS.indexOf(am[2]);
+      ansMap[parseInt(am[1])]=idx2>=0?String(idx2+1):am[2];
+    }
+  }
+
+  /* 노이즈 패턴 */
+  var NOISE=[
+    /^──+/, /^\[지문/, /^\[단원명\]/, /^\[시험\s*시간\]/, /^\[성취\s*기준\]/,
+    /^\[문항/, /^문항\s*\d+[~\-]/, /^제\s*\d+\s*단원/,
+    /^\(가\)\s/, /^\(나\)\s/, /^\(다\)\s/, /^\(라\)\s/, /^\(마\)\s/,
+    /^확인하기$/, /^핵심\s*(구성|개념)/, /^RH[AS]\s*합동/,
+    /^Insight/i, /^중략/, /^\.{3}/, /^정답\s*및\s*해설/, /^Solution/i,
   ];
   function isNoise(line) {
     return NOISE.some(function(p){ return p.test(line.trim()); });
   }
 
-  /* ══ 난이도 맵 ══ */
-  var DIFF_MAP = {"하":"하","중":"중","상":"상","최상":"최상",
-                  "기본":"중","심화":"상","킬러":"최상","쉬움":"하","어려움":"상"};
+  var DIFF_MAP={"하":"하","중":"중","상":"상","최상":"최상",
+    "기본":"중","심화":"상","킬러":"최상","쉬움":"하","어려움":"상"};
 
-  /* ══ 문제 파싱 ══ */
-  var probs = [];
-  var noCounter = 0;
-  var lines = raw.split("\n");
-  var i = 0;
+  /* 인라인 보기 ①②③④⑤ 수집 */
+  function extractChoicesInline(text) {
+    var choices=[], cRe=/[①②③④⑤]\s*([^①②③④⑤\n]+)/g, cm;
+    while((cm=cRe.exec(text))!==null) choices.push(cleanLaTeX(cm[1].trim()));
+    return choices;
+  }
 
-  function readChoicesFrom(startIdx) {
-    var choices = [], li = startIdx;
-    while (li < lines.length) {
-      var nl = lines[li].trim();
-      if (!nl) { li++; continue; }
-      if (/[①②③④⑤]/.test(nl)) {
-        var cRe = /[①②③④⑤]\s*([^①②③④⑤\n]+)/g, cm;
-        while ((cm=cRe.exec(nl))!==null) choices.push(cm[1].trim());
-        li++;
-        break;
+  /* 다음 줄들에서 보기 수집 (각 줄에 하나씩 있는 형식 포함) */
+  function collectChoices(lines, startIdx) {
+    var choices=[], i=startIdx;
+    while(i<lines.length){
+      var nl=lines[i].trim();
+      if(!nl){i++;continue;}
+      /* 보기 문자가 있는 줄 */
+      if(/[①②③④⑤]/.test(nl)){
+        var c=extractChoicesInline(nl);
+        choices=choices.concat(c);
+        i++;
+        /* 각 줄에 보기 1개씩인 형식이면 계속 */
+        if(c.length===1) continue;
+        else break;
       }
       break;
     }
-    return {choices:choices, nextIdx:li};
+    return {choices:choices, nextIdx:i};
   }
 
-  while (i < lines.length) {
-    var line = lines[i].trim(); i++;
-    if (!line || isNoise(line)) continue;
+  function stripChoices(text) {
+    return text.replace(/[①②③④⑤][^①②③④⑤]*/g,"").trim();
+  }
 
-    /* ── 패턴 A: (난이도) 문제내용 ── */
-    var mA = line.match(/^\(([하중상최상기본심화킬러쉬움어려움]+)\)\s*(.+)/);
-    if (mA) {
-      var diff = DIFF_MAP[mA[1]] || "중";
-      var q = mA[2].trim();
-      /* 보기를 같은 줄에서 추출 */
-      var inlineChoices = [];
-      var cInRe = /[①②③④⑤]\s*([^①②③④⑤\n]+)/g, cim;
-      while ((cim=cInRe.exec(q))!==null) inlineChoices.push(cim[1].trim());
-      if (inlineChoices.length) q = q.replace(/[①②③④⑤][^①②③④⑤]*/g,"").trim();
+  function isEssay(q) {
+    return /서술|증명|과정|기술|설명하|이유를\s*쓰/.test(q);
+  }
 
-      /* 다음 줄 보기 확인 */
-      var extraChoices = [];
-      if (inlineChoices.length < 2 && i < lines.length) {
-        var res = readChoicesFrom(i);
-        extraChoices = res.choices; i = res.nextIdx;
-      }
-      var choices = inlineChoices.length ? inlineChoices : extraChoices;
+  var probs=[], lines=raw.split("\n"), i=0, noCounter=0;
 
-      /* 문장이 이어지는 경우 (다음 줄이 같은 문제의 본문) */
-      while (i < lines.length) {
-        var peek = lines[i].trim();
-        if (!peek) { i++; continue; }
-        /* 다음 문제 시작이면 break */
-        if (/^\([하중상최상기본심화킬러]+\)/.test(peek)) break;
-        if (/^\d{1,3}\s*[\.）]/.test(peek) && !isNoise(peek)) break;
-        if (/^[①②③④⑤]/.test(peek)) {
-          var res2 = readChoicesFrom(i);
-          choices = res2.choices; i = res2.nextIdx;
-          break;
-        }
-        /* 노이즈거나 설명문이면 skip */
-        if (isNoise(peek) || peek.length > 100) { i++; break; }
-        break;
-      }
+  while(i<lines.length){
+    var line=lines[i].trim(); i++;
+    if(!line||isNoise(line)) continue;
 
-      noCounter++;
-      var ptype = choices.length>=2 ? "obj"
-        : /서술|증명|과정|기술|설명하|이유|풀이/.test(q) ? "essay" : "subj";
-      var pts = ptype==="essay" ? 8 : ptype==="subj" ? 5 : 3;
+    /* ── [QN] (객관식) [난이도] 문제 [점수] ── */
+    var mQ=line.match(/^\[Q(\d+)\]\s*(?:\((?:객관식|주관식|서술형)\)\s*)?(?:\[([하중상최상기본심화킬러]+)\]\s*)?(.+?)(?:\s*\[(\d+(?:\.\d+)?)점\])?$/);
+    if(mQ){
+      var qNo=parseInt(mQ[1]);
+      var diff=DIFF_MAP[mQ[2]||"중"]||"중";
+      var q=cleanLaTeX(mQ[3].trim());
+      var ptsRaw=mQ[4]?Math.round(parseFloat(mQ[4])):2;
 
-      probs.push({id:"p"+noCounter, type:ptype, no:noCounter,
-        q:q.replace(/\s+/g," ").trim(), choices:choices.slice(0,5),
-        ans:ansMap[noCounter]||"", pts:pts, diff:diff, tag:"", exp:expMap[noCounter]||""});
+      var cr=collectChoices(lines,i); var choices=cr.choices; i=cr.nextIdx;
+
+      var ptype=choices.length>=2?"obj":(isEssay(q)?"essay":"subj");
+      probs.push({id:"p"+qNo,no:qNo,q:q,choices:choices.slice(0,5),
+        type:ptype,diff:diff,pts:ptsRaw,ans:ansMap[qNo]||"",tag:"",exp:""});
       continue;
     }
 
-    /* ── 패턴 B: 번호. 문제 ── */
-    var mB = line.match(/^(\d{1,3})\s*[\.）]\s*(.{4,})/);
-    if (mB) {
-      var bNo = parseInt(mB[1]);
-      var bRaw = mB[2].trim();
+    /* ── (난이도) 문제 ── */
+    var mD=line.match(/^\(([하중상최상기본심화킬러쉬움어려움]+)\)\s*(.{5,})/);
+    if(mD){
+      var diff2=DIFF_MAP[mD[1]]||"중";
+      var q2=cleanLaTeX(mD[2].trim());
+      var pm=q2.match(/\((\d+)점\)/);
+      var pts2=pm?parseInt(pm[1]):3;
+      if(pm) q2=q2.replace(pm[0],"").trim();
 
-      /* 섹션 헤더 제외 */
-      if (/단원|영역|문항\s*\d+~|단계|PART|파트|확인|해설|정답/.test(bRaw)) continue;
-      /* 개념 설명 제외 */
-      if (/^[가-힣]+[이은는]/.test(bRaw) && !/\?|구하|쓰시|서술|증명|계산/.test(bRaw) && bRaw.length<80) continue;
+      var ic=extractChoicesInline(q2);
+      var choices2=ic;
+      if(ic.length) q2=stripChoices(q2);
+      else{ var cr2=collectChoices(lines,i); choices2=cr2.choices; i=cr2.nextIdx; }
 
-      var bPts = 4;
-      var ptsM = bRaw.match(/\((\d+)점\)/); if (ptsM) bPts = parseInt(ptsM[1]);
-      var bQ = bRaw.replace(/\(\d+점\)/g,"").trim();
+      noCounter++;
+      var ptype2=choices2.length>=2?"obj":(isEssay(q2)?"essay":"subj");
+      var pts2f=choices2.length?pts2:(ptype2==="essay"?8:5);
+      probs.push({id:"p"+noCounter,no:noCounter,q:q2,choices:choices2.slice(0,5),
+        type:ptype2,diff:diff2,pts:pts2f,ans:ansMap[noCounter]||"",tag:"",exp:""});
+      continue;
+    }
 
-      /* 보기 (인라인) */
-      var bChoices = [];
-      var bcRe = /[①②③④⑤]\s*([^①②③④⑤\n]+)/g, bcm;
-      while ((bcm=bcRe.exec(bQ))!==null) bChoices.push(bcm[1].trim());
-      if (bChoices.length) bQ = bQ.replace(/[①②③④⑤][^①②③④⑤]*/g,"").trim();
+    /* ── 번호. 문제 ── */
+    var mN=line.match(/^(\d{1,3})\s*[\.）]\s*(.{5,})/);
+    if(mN){
+      var bNo=parseInt(mN[1]);
+      var bQ=cleanLaTeX(mN[2].trim());
+      if(isNoise(bQ.slice(0,20))) continue;
+      if(/^(?:단원|영역|문항\s*\d+~|단계|PART|파트|확인|해설)/.test(bQ.slice(0,20))) continue;
 
-      /* 보기 (다음 줄) */
-      if (bChoices.length < 2 && i < lines.length) {
-        var bRes = readChoicesFrom(i);
-        if (bRes.choices.length) { bChoices = bRes.choices; i = bRes.nextIdx; }
-      }
+      var bpm=bQ.match(/\((\d+(?:\.\d+)?)점\)/);
+      var bpts=bpm?Math.round(parseFloat(bpm[1])):4;
+      if(bpm) bQ=bQ.replace(bpm[0],"").trim();
 
-      var bType = bChoices.length>=2 ? "obj"
-        : /서술|증명|과정|기술|설명하|이유|풀이/.test(bQ) ? "essay" : "subj";
+      var bic=extractChoicesInline(bQ);
+      var bchoices=bic;
+      if(bic.length) bQ=stripChoices(bQ);
+      else{ var bcr=collectChoices(lines,i); bchoices=bcr.choices; i=bcr.nextIdx; }
 
-      probs.push({id:"p"+bNo, type:bType, no:bNo,
-        q:bQ.replace(/\s+/g," ").trim(), choices:bChoices.slice(0,5),
-        ans:ansMap[bNo]||"", pts:bPts, diff:"중", tag:"", exp:expMap[bNo]||""});
+      var btype=bchoices.length>=2?"obj":(isEssay(bQ)?"essay":"subj");
+      probs.push({id:"p"+bNo,no:bNo,q:bQ,choices:bchoices.slice(0,5),
+        type:btype,diff:"중",pts:bpts,ans:ansMap[bNo]||"",tag:"",exp:""});
       continue;
     }
   }
 
   probs.sort(function(a,b){return a.no-b.no;});
-  return {name:name, grade:grade, type:type, school:school, problems:probs};
+  return {name:name,grade:grade,type:type_,school:school,problems:probs};
 }
 
 /* ─────────────────────────────────────────
@@ -1552,6 +1681,8 @@ function buildGradeSummary() {
 
 function rDash() {
   var tp=DB.sets.reduce(function(a,s){return a+s.problems.length;},0);
+  var SUBJ_ICONS={"수학":"🔢","영어":"🔤","국어":"📖","과학":"🔬","사회":"🌍"};
+
   var h='<div class="pgh"><div class="pgt">📊 대시보드</div>'
     +'<div class="pgs">이든X 문제은행 · 학생 '+allS().length+'명</div></div>'
     +'<div style="display:flex;gap:9px;margin-bottom:16px">'
@@ -1560,15 +1691,41 @@ function rDash() {
     +'<div class="sb cn"><div class="sbn">'+DB.sets.length+'</div><div class="sbl">문제집</div></div>'
     +'<div class="sb cb"><div class="sbn">'+tp+'</div><div class="sbl">총 문제</div></div>'
     +'<div class="sb cg"><div class="sbn">'+allS().length+'</div><div class="sbl">학생</div></div>'
-    +'<div class="sb cs"><div class="sbn">'+DB.recs.length+'</div><div class="sbl">응시</div></div></div>'
-    +buildGradeSummary()
-    +'<div class="card"><div class="ct">📋 문제집 현황</div>'
-    +'<table class="tbl"><thead><tr><th>문제집명</th><th>학년</th><th>유형</th><th>문제수</th><th>응시</th><th>관리</th></tr></thead><tbody>';
+    +'<div class="sb cs"><div class="sbn">'+DB.recs.length+'</div><div class="sbl">응시</div></div></div>';
+
+  h += buildGradeSummary();
+
+  /* ── 🔀 드래그 순서 정렬 ── */
+  h += '<div class="card"><div class="ct">🔀 문제집 순서 정렬</div>'
+    +'<div style="font-size:12.5px;color:var(--mu);margin-bottom:12px">'
+    +'⠿ 핸들을 드래그하여 학생 시험 풀기 화면의 순서를 바꾸세요.</div>'
+    +'<ul class="drag-list" id="drag-list">';
+  DB.sets.forEach(function(s,idx2){
+    var subj2=s.subject||"수학";
+    var rc2=DB.recs.filter(function(r){return r.sid===s.id;}).length;
+    h += '<li class="drag-item" draggable="true" data-drag-id="'+s.id+'">'
+      +'<span class="drag-order-badge">'+(idx2+1)+'</span>'
+      +'<span class="drag-handle">⠿⠿</span>'
+      +'<div class="drag-item-info">'
+      +'<div class="drag-item-name">'+(SUBJ_ICONS[subj2]||"📚")+' '+s.name+'</div>'
+      +'<div class="drag-item-meta">'+(s.grade||"")+(s.grade?" · ":"")+(s.type||"")
+      +' · 문제 '+s.problems.length+'개 · 응시 '+rc2+'회</div>'
+      +'</div>'
+      +'<div class="drag-item-actions">'
+      +'<button class="btn bgy bsm" data-edit-set="'+s.id+'">✏️</button>'
+      +'<button class="btn brd bsm" data-del-set="'+s.id+'">🗑️</button>'
+      +'</div></li>';
+  });
+  h += '</ul></div>';
+
+  /* ── 문제집 현황 테이블 ── */
+  h+='<div class="card"><div class="ct">📋 문제집 현황</div>'
+    +'<table class="tbl"><thead><tr><th>문제집명</th><th>과목</th><th>학년</th><th>유형</th><th>문제수</th><th>응시</th><th>관리</th></tr></thead><tbody>';
   DB.sets.forEach(function(s){
     var recCntD=DB.recs.filter(function(r){return r.sid===s.id;}).length;
-    h+='<tr><td><strong>'+s.name+'</strong>'
-      +(s.subject?'<span class="bdg bgy2" style="margin-left:5px;font-size:10px">'+s.subject+'</span>':"")
-      +'</td>'
+    var subj3=s.subject||"수학";
+    h+='<tr><td><strong>'+s.name+'</strong></td>'
+      +'<td><span style="font-size:15px">'+(SUBJ_ICONS[subj3]||"📚")+'</span></td>'
       +'<td><span class="bdg bnv">'+(s.grade||"—")+'</span></td>'
       +'<td><span class="bdg bgy2">'+(s.type||"—")+'</span></td>'
       +'<td>'+s.problems.length+'</td>'
@@ -1578,9 +1735,11 @@ function rDash() {
       +'<button class="btn brd bsm" data-del-set="'+s.id+'">🗑️ 삭제</button>'
       +'</div></td></tr>';
   });
-  if(!DB.sets.length) h+='<tr><td colspan="6" style="text-align:center;color:#aaa;padding:18px">없음</td></tr>';
-  h+='</tbody></table></div>'
-    +'<div class="card"><div class="ct">📈 최근 기록</div>'
+  if(!DB.sets.length) h+='<tr><td colspan="7" style="text-align:center;color:#aaa;padding:18px">없음</td></tr>';
+  h+='</tbody></table></div>';
+
+  /* ── 최근 기록 ── */
+  h+='<div class="card"><div class="ct">📈 최근 기록</div>'
     +'<table class="tbl"><thead><tr><th>일시</th><th>학생</th><th>문제집</th><th>점수</th><th>시간</th></tr></thead><tbody>';
   DB.recs.slice().reverse().slice(0,10).forEach(function(r){
     var s=allS().find(function(x){return x.id===r.uid;});
@@ -1932,6 +2091,13 @@ function rHome() {
     +'<span class="grade-badge gb-'+getGrade(avg)+'" style="margin-top:6px;display:inline-block">'+getGrade(avg)+' 등급</span>'
     +'</div></div>';
 
+  /* 동기화 상태 */
+  h += '<div style="display:flex;justify-content:flex-end;margin:-10px 0 10px">'
+    +'<div class="sync-status">'
+    +'<span class="sync-dot" id="sync-status-dot"></span>'
+    +'<span id="sync-status-label">대기</span>'
+    +'</div></div>';
+
   /* 요약 카드 */
   h += '<div class="grade-grid">'
     +'<div class="grade-box c-bl">'
@@ -1962,6 +2128,7 @@ function rHome() {
     +'</div>';
 
   /* 성적 추이 차트 */
+  h += subjScoreHtml;
   h += chartHtml;
 
   /* 문제집별 정확도 */
@@ -1971,6 +2138,36 @@ function rHome() {
   h += buildRecentRecs(rs, u.id);
 
   return h;
+}
+
+
+/* 과목별 누적 점수 */
+function buildSubjScores(rs) {
+  var SUBJECTS = [
+    {id:"수학",icon:"🔢"},{id:"영어",icon:"🔤"},
+    {id:"국어",icon:"📖"},{id:"과학",icon:"🔬"},{id:"사회",icon:"🌍"}
+  ];
+  var hasData = false;
+  var h = '<div class="chart-wrap"><div class="chart-title">📊 과목별 점수 현황</div>'
+    +'<div class="subj-score-grid">';
+  SUBJECTS.forEach(function(s){
+    var subjSets = DB.sets.filter(function(x){ return x.subject===s.id||(!x.subject&&s.id==="수학"); });
+    var subjRecs = rs.filter(function(r){ return subjSets.some(function(x){return x.id===r.sid;}); });
+    var avg = subjRecs.length
+      ? Math.round(subjRecs.reduce(function(a,r){return a+r.sc/r.tot*100;},0)/subjRecs.length)
+      : null;
+    if (avg!==null) hasData=true;
+    var c = avg!==null ? gradeColor(avg) : "#cbd5e1";
+    h += '<div class="subj-score-box">'
+      +'<div class="ssb-icon">'+s.icon+'</div>'
+      +'<div class="ssb-name">'+s.id+'</div>'
+      +'<div class="ssb-score" style="color:'+c+'">'+(avg!==null?avg+'점':'—')+'</div>'
+      +'<div class="ssb-cnt">'+(subjRecs.length?subjRecs.length+'회 응시':'미응시')+'</div>'
+      +'<div class="ssb-bar"><div class="ssb-bar-in" style="width:'+(avg||0)+'%;background:'+c+'"></div></div>'
+      +'</div>';
+  });
+  h += '</div></div>';
+  return hasData ? h : '';
 }
 
 /* ── 성적 추이 차트 ── */
@@ -2216,21 +2413,76 @@ function rGrades() {
 }
 
 function rQSel() {
-  if(!DB.sets.length) return '<div class="empty"><div class="ei">📭</div><p>문제집 없음</p></div>';
-  var h='<div style="margin-bottom:16px"><div class="pgt">📝 시험 풀기</div><div class="pgs">문제집을 선택하세요</div></div>';
-  DB.sets.forEach(function(s){
-    var cnt=DB.recs.filter(function(r){return r.sid===s.id&&r.uid===(APP.u?APP.u.id:"");}).length;
-    h+='<div class="setc" data-qset="'+s.id+'">'
-      +'<div class="setn">'+s.name+'</div>'
-      +'<div style="display:flex;gap:6px;margin-bottom:9px">'
-      +(s.grade?'<span class="bdg bnv">'+s.grade+'</span>':"")
-      +(s.type?'<span class="bdg bgy2">'+s.type+'</span>':"")+'</div>'
-      +'<div style="display:flex;gap:14px;font-size:12.5px;color:var(--mu)">'
-      +'<span>문제 <strong style="color:var(--nv)">'+s.problems.length+'</strong>개</span>'
-      +'<span>내 응시 <strong>'+cnt+'</strong>회</span></div></div>';
+  var SUBJECTS = [
+    {id:"수학",icon:"🔢"},{id:"영어",icon:"🔤"},
+    {id:"국어",icon:"📖"},{id:"과학",icon:"🔬"},{id:"사회",icon:"🌍"}
+  ];
+  var curSubj = APP._stuSubj || "수학";
+
+  if (!DB.sets.length)
+    return '<div class="empty"><div class="ei">📭</div><p>문제집 없음</p></div>';
+
+  /* 과목별 문제집 */
+  function setsOfSubj(subj) {
+    return DB.sets.filter(function(s){
+      return s.subject===subj || (!s.subject && subj==="수학");
+    });
+  }
+
+  var h = '<div style="margin-bottom:14px">'
+    +'<div class="pgt">📝 시험 풀기</div>'
+    +'<div class="pgs" style="margin-top:3px">과목을 선택하고 문제집을 풀어보세요</div></div>';
+
+  /* 과목 탭 */
+  h += '<div class="stu-subj-tabs">';
+  SUBJECTS.forEach(function(s){
+    var cnt = setsOfSubj(s.id).length;
+    h += '<button class="stu-subj-tab'+(s.id===curSubj?" on":"")+'" data-stu-subj="'+s.id+'">'
+      +'<span class="sst-ic">'+s.icon+'</span>'
+      +s.id
+      +'<span class="sst-cnt">'+cnt+'개</span></button>';
+  });
+  h += '</div>';
+
+  /* 과목별 패널 */
+  SUBJECTS.forEach(function(s){
+    var sets = setsOfSubj(s.id);
+    h += '<div class="stu-subj-panel'+(s.id===curSubj?" on":"")+'" id="ssp-'+s.id+'">';
+    if (!sets.length) {
+      h += '<div style="text-align:center;padding:28px;color:var(--mu);font-size:13px">'
+        +s.icon+' '+s.id+' 문제집이 없습니다</div>';
+    } else {
+      sets.forEach(function(set){
+        var myRecs = DB.recs.filter(function(r){ return r.sid===set.id && r.uid===(APP.u?APP.u.id:""); });
+        var bestPct = myRecs.length
+          ? Math.max.apply(null, myRecs.map(function(r){ return Math.round(r.sc/r.tot*100); }))
+          : null;
+        var isDone = bestPct !== null && bestPct >= 90;
+        h += '<div class="setc'+(isDone?" done":"")+'" data-qset="'+set.id+'">'
+          +'<div class="setn">'+set.name
+          +(isDone?' <span style="color:var(--gn);font-size:13px">✅</span>':'')+'</div>'
+          +'<div style="display:flex;gap:6px;margin-bottom:9px;flex-wrap:wrap">'
+          +(set.grade?'<span class="bdg bnv">'+set.grade+'</span>':"")
+          +(set.type?'<span class="bdg bgy2">'+set.type+'</span>':"")
+          +'</div>'
+          +'<div style="display:flex;gap:14px;font-size:12.5px;color:var(--mu);flex-wrap:wrap">'
+          +'<span>문제 <strong style="color:var(--nv)">'+set.problems.length+'</strong>개</span>'
+          +'<span>내 응시 <strong>'+myRecs.length+'</strong>회</span>'
+          +(bestPct!==null
+            ?'<span>최고 <strong style="color:'+gradeColor(bestPct)+'">'+bestPct+'점</strong></span>'
+            :'<span style="color:#94a3b8">미응시</span>')
+          +'</div>'
+          +(bestPct!==null?'<div style="margin-top:8px;height:5px;background:#e2e8f0;border-radius:3px;overflow:hidden">'
+            +'<div style="width:'+bestPct+'%;height:100%;background:'+gradeColor(bestPct)+';border-radius:3px;transition:width .5s"></div>'
+            +'</div>':"")
+          +'</div>';
+      });
+    }
+    h += '</div>';
   });
   return h;
 }
+
 
 /* ─────────────────────────────────────────
    QUIZ / buildSheet
@@ -2432,9 +2684,11 @@ function doSubmit() {
     var now2=new Date();
     var dt=now2.getFullYear()+"."+(now2.getMonth()+1)+"."+now2.getDate()
       +" "+now2.getHours()+":"+String(now2.getMinutes()).padStart(2,"0");
-    DB.recs.push({id:uid(),uid:APP.u.id,sid:APP.q.sid,dt:dt,sc:ep,tot:tot,tm:fmtT(_ts),
-      ans:APP.q.probs.map(function(p){return{pid:p.id,cho:APP.q.ans[p.id]||"",ok:chk(p,APP.q.ans[p.id])};})});
-    sdb();
+    var newRec = {id:uid(),uid:APP.u.id,sid:APP.q.sid,dt:dt,sc:ep,tot:tot,tm:fmtT(_ts),
+      ans:APP.q.probs.map(function(p){return{pid:p.id,cho:APP.q.ans[p.id]||"",ok:chk(p,APP.q.ans[p.id])};})};
+    DB.recs.push(newRec); sdb();
+    /* 클라우드 동기화 */
+    pushRecord(newRec).catch(function(){});
   }
   showToast("채점 완료! "+ep+"/"+tot+"점 ✅","ok");
   document.getElementById("sb").innerHTML=buildSheet();
@@ -2540,7 +2794,7 @@ function rConq() {
 document.addEventListener("click", function(e) {
   /* closest로 실제 이벤트 대상 탐색 */
   var t = e.target.closest(
-    "[id],[data-sp],[data-qset],[data-prev],[data-pl]," +
+    "[id],[data-sp],[data-qset],[data-prev],[data-pl],[data-stu-subj]," +
     "[data-del-set],[data-del-stu],[data-edit-set]," +
     "[data-subj-tab],[data-inner-grade],[data-ubtab]," +
     "[data-paste-clear],[data-paste-parse],[data-paste-upload]," +
@@ -2785,6 +3039,93 @@ document.addEventListener("change", function(e) {
       var r=new FileReader(); r.onload=function(ev){impJSONSubj(ev.target.result,subj,grade);}; r.readAsText(f,"UTF-8");
     } else { readAuto(f,function(raw){procTxtSubj(raw,subj,grade);}); }
   }
+});
+
+
+/* ══ 드래그 정렬 이벤트 ══ */
+var _dragId = null, _dragOverId = null;
+
+document.addEventListener("dragstart", function(e) {
+  var item = e.target.closest(".drag-item");
+  if (!item) return;
+  _dragId = item.getAttribute("data-drag-id");
+  item.classList.add("dragging");
+  e.dataTransfer.effectAllowed = "move";
+});
+
+document.addEventListener("dragend", function(e) {
+  var item = e.target.closest(".drag-item");
+  if (item) item.classList.remove("dragging");
+  document.querySelectorAll(".drag-item.drag-over").forEach(function(el){
+    el.classList.remove("drag-over");
+  });
+  _dragId = null; _dragOverId = null;
+});
+
+document.addEventListener("dragover", function(e) {
+  var item = e.target.closest(".drag-item[data-drag-id]");
+  var dz = e.target.closest(".dropzone-new");
+  if (dz) { e.preventDefault(); dz.classList.add("over"); return; }
+  if (!item || item.getAttribute("data-drag-id") === _dragId) return;
+  e.preventDefault();
+  document.querySelectorAll(".drag-item.drag-over").forEach(function(el){
+    el.classList.remove("drag-over");
+  });
+  item.classList.add("drag-over");
+  _dragOverId = item.getAttribute("data-drag-id");
+});
+
+document.addEventListener("dragleave", function(e) {
+  var dz = e.target.closest(".dropzone-new");
+  if (dz && !dz.contains(e.relatedTarget)) dz.classList.remove("over");
+  var item = e.target.closest(".drag-item");
+  if (item && !item.contains(e.relatedTarget)) item.classList.remove("drag-over");
+});
+
+document.addEventListener("drop", function(e) {
+  /* 파일 드롭존 */
+  var dz = e.target.closest(".dropzone-new");
+  if (dz) {
+    e.preventDefault(); dz.classList.remove("over");
+    var subj2=dz.getAttribute("data-subj"), grade2=dz.getAttribute("data-grade");
+    var f2=e.dataTransfer.files[0]; if(!f2) return;
+    if(f2.name.endsWith(".json")){
+      var r2=new FileReader(); r2.onload=function(ev){impJSONSubj(ev.target.result,subj2,grade2);}; r2.readAsText(f2,"UTF-8");
+    } else { readAuto(f2,function(raw2){procTxtSubj(raw2,subj2,grade2);}); }
+    return;
+  }
+
+  /* 드래그 정렬 드롭 */
+  var item2 = e.target.closest(".drag-item");
+  if (!item2 || !_dragId || !_dragOverId || _dragId===_dragOverId) return;
+  e.preventDefault();
+  item2.classList.remove("drag-over");
+
+  /* DB에서 순서 교체 */
+  var fromIdx = DB.sets.findIndex(function(s){ return s.id===_dragId; });
+  var toIdx   = DB.sets.findIndex(function(s){ return s.id===_dragOverId; });
+  if (fromIdx<0 || toIdx<0) return;
+  var moved = DB.sets.splice(fromIdx,1)[0];
+  DB.sets.splice(toIdx,0,moved);
+  sdb();
+
+  /* 순서 번호 DOM 업데이트 */
+  var list = document.getElementById("drag-list");
+  if (list) {
+    var items = list.querySelectorAll(".drag-item");
+    items.forEach(function(el, i){
+      var badge = el.querySelector(".drag-order-badge");
+      if (badge) badge.textContent = i+1;
+    });
+    /* 실제 DOM 이동 */
+    var fromEl = list.querySelector('[data-drag-id="'+_dragId+'"]');
+    var toEl   = list.querySelector('[data-drag-id="'+_dragOverId+'"]');
+    if (fromEl && toEl) {
+      if (fromIdx < toIdx) toEl.after(fromEl);
+      else toEl.before(fromEl);
+    }
+  }
+  showToast("순서 저장 ✅","ok");
 });
 
 window.addEventListener("DOMContentLoaded",function(){ showScr("sl"); });
