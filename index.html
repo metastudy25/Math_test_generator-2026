@@ -2414,72 +2414,88 @@ function rGrades() {
 
 function rQSel() {
   var SUBJECTS = [
-    {id:"수학",icon:"🔢"},{id:"영어",icon:"🔤"},
-    {id:"국어",icon:"📖"},{id:"과학",icon:"🔬"},{id:"사회",icon:"🌍"}
+    {id:"수학", icon:"🔢"},
+    {id:"영어", icon:"🔤"},
+    {id:"국어", icon:"📖"},
+    {id:"과학", icon:"🔬"},
+    {id:"사회", icon:"🌍"}
   ];
+  var SUBJ_ICONS = {"수학":"🔢","영어":"🔤","국어":"📖","과학":"🔬","사회":"🌍"};
   var curSubj = APP._stuSubj || "수학";
 
   if (!DB.sets.length)
     return '<div class="empty"><div class="ei">📭</div><p>문제집 없음</p></div>';
 
-  /* 과목별 문제집 */
-  function setsOfSubj(subj) {
+  function setsOf(subj) {
     return DB.sets.filter(function(s){
       return s.subject===subj || (!s.subject && subj==="수학");
     });
   }
 
+  /* 제목 */
   var h = '<div style="margin-bottom:14px">'
-    +'<div class="pgt">📝 시험 풀기</div>'
-    +'<div class="pgs" style="margin-top:3px">과목을 선택하고 문제집을 풀어보세요</div></div>';
+    + '<div class="pgt">📝 시험 풀기</div>'
+    + '<div class="pgs" style="margin-top:3px">과목 선택 → 문제집 선택 → 풀기 시작</div>'
+    + '</div>';
 
-  /* 과목 탭 */
-  h += '<div class="stu-subj-tabs">';
-  SUBJECTS.forEach(function(s){
-    var cnt = setsOfSubj(s.id).length;
-    h += '<button class="stu-subj-tab'+(s.id===curSubj?" on":"")+'" data-stu-subj="'+s.id+'">'
-      +'<span class="sst-ic">'+s.icon+'</span>'
-      +s.id
-      +'<span class="sst-cnt">'+cnt+'개</span></button>';
+  /* ── 과목 버튼 바 ── */
+  h += '<div class="stu-subj-bar">';
+  SUBJECTS.forEach(function(s) {
+    var cnt = setsOf(s.id).length;
+    var isOn = (s.id === curSubj);
+    h += '<button class="stu-subj-btn' + (isOn ? ' on' : '') + '" data-stu-subj="' + s.id + '">'
+      + '<span class="ssb-ic">' + s.icon + '</span>'
+      + s.id
+      + '<span class="ssb-c">' + cnt + '개</span>'
+      + '</button>';
   });
   h += '</div>';
 
-  /* 과목별 패널 */
-  SUBJECTS.forEach(function(s){
-    var sets = setsOfSubj(s.id);
-    h += '<div class="stu-subj-panel'+(s.id===curSubj?" on":"")+'" id="ssp-'+s.id+'">';
+  /* ── 과목별 패널 ── */
+  SUBJECTS.forEach(function(s) {
+    var isOn = (s.id === curSubj);
+    var sets = setsOf(s.id);
+    h += '<div class="stu-panel' + (isOn ? ' on' : '') + '" id="stu-panel-' + s.id + '">';
+
     if (!sets.length) {
-      h += '<div style="text-align:center;padding:28px;color:var(--mu);font-size:13px">'
-        +s.icon+' '+s.id+' 문제집이 없습니다</div>';
+      h += '<div style="text-align:center;padding:32px;color:var(--mu);font-size:13px;background:#fff;border-radius:10px;border:1px solid var(--br)">'
+        + s.icon + ' ' + s.id + ' 문제집이 아직 없습니다</div>';
     } else {
-      sets.forEach(function(set){
-        var myRecs = DB.recs.filter(function(r){ return r.sid===set.id && r.uid===(APP.u?APP.u.id:""); });
+      sets.forEach(function(set) {
+        var myRecs = DB.recs.filter(function(r) {
+          return r.sid === set.id && APP.u && r.uid === APP.u.id;
+        });
         var bestPct = myRecs.length
-          ? Math.max.apply(null, myRecs.map(function(r){ return Math.round(r.sc/r.tot*100); }))
+          ? Math.max.apply(null, myRecs.map(function(r) { return Math.round(r.sc / r.tot * 100); }))
           : null;
-        var isDone = bestPct !== null && bestPct >= 90;
-        h += '<div class="setc'+(isDone?" done":"")+'" data-qset="'+set.id+'">'
-          +'<div class="setn">'+set.name
-          +(isDone?' <span style="color:var(--gn);font-size:13px">✅</span>':'')+'</div>'
-          +'<div style="display:flex;gap:6px;margin-bottom:9px;flex-wrap:wrap">'
-          +(set.grade?'<span class="bdg bnv">'+set.grade+'</span>':"")
-          +(set.type?'<span class="bdg bgy2">'+set.type+'</span>':"")
-          +'</div>'
-          +'<div style="display:flex;gap:14px;font-size:12.5px;color:var(--mu);flex-wrap:wrap">'
-          +'<span>문제 <strong style="color:var(--nv)">'+set.problems.length+'</strong>개</span>'
-          +'<span>내 응시 <strong>'+myRecs.length+'</strong>회</span>'
-          +(bestPct!==null
-            ?'<span>최고 <strong style="color:'+gradeColor(bestPct)+'">'+bestPct+'점</strong></span>'
-            :'<span style="color:#94a3b8">미응시</span>')
-          +'</div>'
-          +(bestPct!==null?'<div style="margin-top:8px;height:5px;background:#e2e8f0;border-radius:3px;overflow:hidden">'
-            +'<div style="width:'+bestPct+'%;height:100%;background:'+gradeColor(bestPct)+';border-radius:3px;transition:width .5s"></div>'
-            +'</div>':"")
-          +'</div>';
+        var isDone = (bestPct !== null && bestPct >= 90);
+
+        h += '<div class="setc' + (isDone ? ' done' : '') + '" data-qset="' + set.id + '">'
+          + '<div class="setn">' + s.icon + ' ' + set.name
+          + (isDone ? ' <span style="color:var(--gn)">✅</span>' : '') + '</div>'
+          + '<div style="display:flex;gap:6px;margin-bottom:9px;flex-wrap:wrap">'
+          + (set.grade ? '<span class="bdg bnv">' + set.grade + '</span>' : '')
+          + (set.type  ? '<span class="bdg bgy2">' + set.type  + '</span>' : '')
+          + '</div>'
+          + '<div style="display:flex;gap:14px;font-size:12.5px;color:var(--mu);flex-wrap:wrap">'
+          + '<span>문제 <strong style="color:var(--nv)">' + set.problems.length + '</strong>개</span>'
+          + '<span>내 응시 <strong>' + myRecs.length + '</strong>회</span>'
+          + (bestPct !== null
+              ? '<span>최고 <strong style="color:' + gradeColor(bestPct) + '">' + bestPct + '점</strong></span>'
+              : '<span style="color:#94a3b8">미응시</span>')
+          + '</div>'
+          + (bestPct !== null
+              ? '<div style="margin-top:8px;height:5px;background:#e2e8f0;border-radius:3px;overflow:hidden">'
+                + '<div style="width:' + bestPct + '%;height:100%;background:' + gradeColor(bestPct) + ';border-radius:3px;transition:width .5s"></div>'
+                + '</div>'
+              : '')
+          + '</div>';
       });
     }
+
     h += '</div>';
   });
+
   return h;
 }
 
@@ -2866,7 +2882,15 @@ document.addEventListener("click", function(e) {
   if (t.id==="retry-btn"||t.id==="retry-btn2") { doRetry(); return; }
   if (t.id==="wq-btn")      { doWrongQuiz(); return; }
 
-  /* ── 과목 탭 ── */
+  /* ── 학생 과목 탭 (시험 풀기 화면) ── */
+  var stuSubj = t.getAttribute("data-stu-subj");
+  if (stuSubj) {
+    APP._stuSubj = stuSubj;
+    sp("quiz");
+    return;
+  }
+
+  /* ── 과목 탭 (관리자 업로드) ── */
   var subjTab = t.getAttribute("data-subj-tab");
   if (subjTab) { APP._upSubj=subjTab; ap("up"); return; }
 
